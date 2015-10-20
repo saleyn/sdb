@@ -1,0 +1,3 @@
+PKG_ROOT_DIR=/opt/pkg
+BOOST_ROOT=/opt/pkg/boost/current
+BOOST_LIBRARYDIR=/opt/pkg/boost/current/gcc/lib

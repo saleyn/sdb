@@ -1,0 +1,249 @@
+// vim:ts=2:sw=2:et
+//-----------------------------------------------------------------------------
+/// \file  secdb_krx_fmt.hpp
+//------------------------------------------------------------------------------
+/// \brief SecDB file format reader/writer
+///
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format
+//------------------------------------------------------------------------------
+// Copyright (c) 2015 Omnibius, LLC
+// Author:  Serge Aleynikov <saleyn@gmail.com>
+// Created: 2015-10-15
+//------------------------------------------------------------------------------
+#include <secdb/secdb.hpp>
+#include <utxx/get_option.hpp>
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/progress.hpp>
+
+using namespace std;
+using namespace secdb;
+
+//------------------------------------------------------------------------------
+void Usage(std::string const& a_text = "")
+{
+  if (!a_text.empty())
+    cout << a_text << endl << endl;
+
+  cout << "KRX to SecDB file format converter\n"
+       << "Copyright (c) 2015 Omnibius, LLC\n\n"
+       << "Usage: " << utxx::path::program::name()
+       << " -f MDFilename -x Exchange -s Symbol -i Instr -n SecID -y Date\n"
+       << "       [-o|-O OutputDir] [-d] [-q]\n"
+       << "\nOptions:\n"
+       << "  -f MDFilename        - filename with KRX market data\n"
+       << "  -o|--dir OutDir      - output directory (def: MDFilename's dir)\n"
+       << "  -O|--full-dir OutDir - deep output directory (same as -o option,\n"
+       << "                         except the subdirectory structure is\n"
+       << "                         created inside OutDir according to\n"
+       << "                         SecDB directory specification format\n"
+       << "  -d                   - enable debug printouts\n"
+       << "  -q                   - quiet mode (don't display a progress bar)\n"
+       << "  -x|--xchg Exchange   - name of the financial exchange\n"
+       << "  -s Symbol            - company-specific symbol name\n"
+       << "  -i Instr             - exchange-specific instrument name\n"
+       << "  -n|--secid SecID     - exchange-specific security id\n"
+       << "  -y|--date YYYYMMDD   - date of market data in this file\n"
+       << "\n";
+  exit(1);
+}
+
+//------------------------------------------------------------------------------
+void UnhandledException() {
+  auto p = current_exception();
+  try    { rethrow_exception(p); }
+  catch  ( exception& e ) { cerr << e.what() << endl; }
+  catch  ( ... )          { cerr << "Unknown exception" << endl; }
+  exit(1);
+}
+
+// Fields in the KRX data file
+enum class MD {
+    UTCTime
+  , Bid
+  , L1BVo
+  , L2BVo
+  , L3BVo
+  , Ask
+  , L1AVo
+  , L2AVo
+  , L3AVo
+  , LstPx
+  , LstQty
+  , NBids
+  , NAsks
+  , TotBV
+  , TotAV
+  , SIZE
+};
+
+//------------------------------------------------------------------------------
+int main(int argc, char* argv[])
+//------------------------------------------------------------------------------
+{
+  if (argc < 2)
+    Usage("Missing required option(s)");
+
+  set_terminate(&UnhandledException);
+
+  std::string filename;
+  bool        quiet   = false;
+  int         debug   = 0;
+  bool        subdirs = false;
+  std::string outdir;
+  std::string xchg;
+  std::string symbol;
+  std::string instr;
+  std::string dtstr;
+  time_t      date    = 0;
+  long        secid   = 0;
+
+  bool        valid   = false;
+
+  utxx::opts_parser opts(argc, argv);
+  while  (opts.next()) {
+      if (opts.match("-f", "", &filename))         continue;
+      if (opts.match("-d", string("--debug")))     { debug++; continue; }
+      if (opts.match("-q", "--quiet",    &quiet))  continue;
+      if (opts.match("-o", "--dir",      &outdir)) continue;
+      if (opts.match("-O", "--full-dir", &outdir)) { subdirs = true; continue; }
+      if (opts.match("-x", "--xchg",     &xchg))   continue;
+      if (opts.match("-s", "--symbol",   &symbol)) continue;
+      if (opts.match("-i", "--instr",    &instr))  continue;
+      if (opts.match("-n", "--secid",    &secid))  continue;
+      if (opts.match("-y", "--date",     &dtstr))  {
+        if (dtstr.size() != 8)
+          Usage("Invalid date format (expected: YYYYMMDD)");
+        int y = stoi(dtstr.substr(0, 4));
+        int m = stoi(dtstr.substr(4, 2));
+        int d = stoi(dtstr.substr(6, 2));
+        date = utxx::time_val::universal_time(y, m, d, 0, 0, 0, 0).sec();
+        continue;
+      }
+
+      if (opts.is_help()) Usage();
+
+      Usage(string("Invalid option: ") + opts());
+  }
+
+  if (filename.empty()) Usage("Missing required option -f");
+  if (xchg.empty())     Usage("Missing required option -e");
+  if (symbol.empty())   Usage("Missing required option -s");
+  if (instr.empty())    Usage("Missing required option -i");
+  if (date  == 0)       Usage("Missing required option -y");
+  if (secid == 0)       Usage("Missing required option -n");
+
+  if (outdir.empty())   outdir = utxx::path::dirname(filename);
+
+  auto file = fopen(filename.c_str(), "r");
+
+  if (!file) {
+    cerr << "Cannot open file " << filename << ": " << strerror(errno) << endl;
+    exit(1);
+  }
+
+  std::shared_ptr<boost::progress_display> show_progress;
+
+  long file_size = utxx::path::file_size(filename);
+  long file_pos  = 0;
+
+  BaseSecDBFileIO<3> output;
+
+  output.Debug(debug);
+
+  auto out_name = output.Filename(outdir, subdirs, xchg, symbol, instr, secid, date);
+  utxx::path::file_unlink(out_name);
+
+  if (!quiet) {
+    cerr << filename << " -> " << out_name << endl;
+    if (file_size > 0)
+      show_progress.reset(new boost::progress_display(file_size, cerr));
+  }
+
+  char buf[512];
+
+  while (fgets(buf, sizeof(buf), file)) {
+    if (buf[0] == '#') continue;  // This is a comment
+
+    vector<string> fields;
+
+    auto value = [&](MD a_fld) { return fields[int(a_fld)]; };
+
+    boost::split(fields, buf, boost::is_any_of(" |"),
+        boost::algorithm::token_compress_on);
+
+    if (fields.size() != int(MD::SIZE)) {
+      cerr << "Invalid record format:\n  " << buf << endl;
+      continue;
+    }
+
+    auto msec = stol(value(MD::UTCTime));
+    time_val now(msec / 1000, (msec % 1000) * 1000);
+
+    if (!valid) {
+      time_t d = now.sec() - now.sec() % 86400;
+
+      if (d != date) {
+        cerr << "Invalid date (expected: "
+             << utxx::timestamp::to_string(time_val(date, 0), utxx::DATE)
+             << ", got: "
+             << utxx::timestamp::to_string(now, utxx::DATE) << '\n';
+        exit(1);
+      }
+
+      valid = true;
+
+      output.Open<OpenMode::Write>
+        (outdir, subdirs, xchg, symbol, instr, secid, date, 3, 0.05, 0664);
+
+      output.WriteStreamsMeta({StreamType::Quotes, StreamType::Trade});
+      // 1min candles from 9am to 15pm KRW time
+      auto tz_offset = 3600*9;
+      output.WriteCandlesMeta
+        ({CandleHeader(60, 3600*9 - tz_offset, 3600*15 - tz_offset)});
+
+      output.Flush();
+    }
+
+    float bid =        stof(value(MD::Bid));
+    float ask =        stof(value(MD::Ask));
+
+    auto book = PxLevels<6, float>
+    {{
+        {bid - 0.10f,  stoi(value(MD::L3BVo))}
+      , {bid - 0.05f,  stoi(value(MD::L2BVo))}
+      , {bid        ,  stoi(value(MD::L1BVo))}
+      , {ask        , -stoi(value(MD::L1AVo))}
+      , {ask + 0.05f, -stoi(value(MD::L2AVo))}
+      , {ask + 0.10f, -stoi(value(MD::L3AVo))}
+    }};
+
+    float last_px  = stof(value(MD::LstPx));
+    int   last_qty = stoi(value(MD::LstQty));
+
+    // Write the quote info
+    output.WriteQuotes<PriceUnit::DoubleVal>(now, std::move(book), 6);
+
+    if (last_qty != 0) {
+      // Write trade details
+      SideT side = last_qty < 0 ? SideT::Sell : SideT::Buy;
+      AggrT aggr = ((side == SideT::Buy  && abs(last_px - ask) < 0.001) ||
+                    (side == SideT::Sell && abs(last_px - bid) < 0.001))
+                 ? AggrT::Aggressor : AggrT::Passive;
+
+      output.WriteTrade<PriceUnit::DoubleVal>
+        (now, side, last_px, last_qty, aggr, 0, 0);
+    }
+
+    if (show_progress) {
+      auto pos = ftell(file);
+      auto len = pos - file_pos;
+      *show_progress += len;
+      file_pos = pos;
+    }
+  }
+
+  output.Close();
+
+  return 0;
+}
