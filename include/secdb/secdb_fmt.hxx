@@ -27,12 +27,20 @@ namespace secdb {
 // CandleHeader
 //==============================================================================
 inline Candle* CandleHeader::
-TimeToCandle(uint a_ts)
+TimeToCandle(int a_ts)
 {
   assert(a_ts  < 86400);
-  int  n       = (a_ts-m_start_time)/m_resolution;
+  int  n       = (a_ts - m_start_time)/m_resolution;
   bool invalid = n < 0 || n >= int(m_candles.size());
   return utxx::unlikely(invalid) ? nullptr : &m_candles[n];
+}
+
+//------------------------------------------------------------------------------
+inline int CandleHeader::
+CandleToTime(uint a_idx) const
+{
+  assert(a_idx < m_candles.size());
+  return m_start_time + m_resolution*a_idx;
 }
 
 //==============================================================================

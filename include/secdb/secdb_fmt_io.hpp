@@ -31,9 +31,6 @@ namespace secdb {
 template <uint MaxDepth = 10>
 struct BaseSecDBFileIO {
 
-  /// Market indicating beginning of stream data section
-  static constexpr uint BEGIN_STREAM_DATA() { return 0xABBABABA; }
-
   //----------------------------------------------------------------------------
   // Public API
   //----------------------------------------------------------------------------
@@ -41,16 +38,21 @@ struct BaseSecDBFileIO {
   BaseSecDBFileIO()  { static_assert(MaxDepth < 128, "MaxDepth is too large"); }
 
   /// Open \a a_filename for reading
-  BaseSecDBFileIO(std::string const& a_filename) { Open(a_filename); }
+  BaseSecDBFileIO(std::string const& a_file, int a_debug = 0);
 
   ~BaseSecDBFileIO() { Close(); }
 
-  Header      const&  Info()      const { return m_header;        }
-  int                 Date()      const { return m_header.Date(); }
-  std::string const&  Filename()  const { return m_filename;      }
+  Header      const&  Info()      const { return m_header;            }
+  time_t              Date()      const { return m_header.Date();     }
+  time_t              Midnight()  const { return m_header.Midnight(); }
+  std::string const&  Filename()  const { return m_filename;          }
 
-  int                 Debug()     const { return m_debug;         }
-  void                Debug(int a)      { m_debug = a;            }
+  std::string         TZ()        const { return m_header.TZ();       }
+  std::string const&  TZName()    const { return m_header.TZName();   }
+  int                 TZOffset()  const { return m_header.TZOffset(); }
+
+  int                 Debug()     const { return m_debug;             }
+  void                Debug(int a)      { m_debug = a;                }
 
   /// Get filename based on given arguments
   static std::string Filename
@@ -65,15 +67,16 @@ struct BaseSecDBFileIO {
   );
 
   /// Open file for reading or writing
-  /// @param a_path     base directory of SecDB database
-  /// @param a_deep_dir when true the output file is created inside a nested
-  ///                   directory tree as specified by the SecDB file naming
-  ///                   convention.  Otherwise the \a a_path dir is used.
-  /// @param a_xchg     exchange name
-  /// @param a_symbol   company-specific security name
-  /// @param a_instr    exchange-specific security name
-  /// @param a_date     UTC date of the file
-  /// @param a_perm     file permissions (used when creating a file for writing)
+  /// @param a_path      base directory of SecDB database
+  /// @param a_deep_dir  when true the output file is created inside a nested
+  ///                    directory tree as specified by the SecDB file naming
+  ///                    convention.  Otherwise the \a a_path dir is used.
+  /// @param a_xchg      exchange name
+  /// @param a_symbol    company-specific security name
+  /// @param a_instr     exchange-specific security name
+  /// @param a_date      UTC date of the file
+  /// @param a_tz_offset Local TZ offset
+  /// @param a_perm      file permissions (used when creating a file for writing)
   template <OpenMode Mode>
   void Open
   (
@@ -84,6 +87,8 @@ struct BaseSecDBFileIO {
     std::string const& a_instr,
     long               a_secid,
     time_t             a_date,
+    std::string const& a_tz_name,
+    int                a_tz_offset,
     uint8_t            a_depth   = 5,
     double             a_px_step = 0.0001,
     int                a_perm    = 0640,
@@ -91,7 +96,7 @@ struct BaseSecDBFileIO {
   );
 
   /// Open existing file for reading
-  void Open(std::string const& a_filename);
+  void Open(std::string const& a_filename, int a_debug = 0);
   void Close();
 
   /// Write file header
@@ -102,6 +107,8 @@ struct BaseSecDBFileIO {
     std::string const& a_instr,
     long               a_secid,
     time_t             a_date,
+    std::string const& a_tz_name,
+    int                a_tz_offset,
     uint8_t            a_depth,
     double             a_px_step,
     uuid        const& a_uuid    = boost::uuids::random_generator()()
@@ -183,6 +190,10 @@ private:
 
   template <PriceUnit PU, typename T>
   int    NormalizePx(T a_px);
+
+  double NormalPxToDouble(int a_px) const { return a_px * m_header.PxStep(); }
+
+  void   PrintCandles() const;
 };
 
 } // namespace secdb

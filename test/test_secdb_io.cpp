@@ -44,8 +44,8 @@ BOOST_AUTO_TEST_CASE( test_secdb )
 
     UTXX_CHECK_NO_THROW
       (sdb.Open<OpenMode::Write>
-        (dir,  false, "KRX", "KR4101", "KR4101K60008", 1, date, 5, 0.01,
-         0640, uuid));
+        (dir,  false, "KRX", "KR4101", "KR4101K60008", 1, date, "KST", 3600*9,
+         5,    0.01,  0640,  uuid));
 
     sdb.WriteStreamsMeta({StreamType::Quotes, StreamType::Trade});
     sdb.WriteCandlesMeta({CandleHeader(300, 3600*9, 3600*15)});

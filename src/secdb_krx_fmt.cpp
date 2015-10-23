@@ -95,6 +95,7 @@ int main(int argc, char* argv[])
   std::string symbol;
   std::string instr;
   std::string dtstr;
+  std::string tz("Asia/Seoul");
   time_t      date    = 0;
   long        secid   = 0;
 
@@ -102,15 +103,16 @@ int main(int argc, char* argv[])
 
   utxx::opts_parser opts(argc, argv);
   while  (opts.next()) {
-      if (opts.match("-f", "", &filename))         continue;
-      if (opts.match("-d", string("--debug")))     { debug++; continue; }
-      if (opts.match("-q", "--quiet",    &quiet))  continue;
-      if (opts.match("-o", "--dir",      &outdir)) continue;
+      if (opts.match("-f", "",           &filename)) continue;
+      if (opts.match("-d", "--debug"))             { debug++; continue; }
+      if (opts.match("-q", "--quiet",    &quiet))    continue;
+      if (opts.match("-o", "--dir",      &outdir))   continue;
       if (opts.match("-O", "--full-dir", &outdir)) { subdirs = true; continue; }
-      if (opts.match("-x", "--xchg",     &xchg))   continue;
-      if (opts.match("-s", "--symbol",   &symbol)) continue;
-      if (opts.match("-i", "--instr",    &instr))  continue;
-      if (opts.match("-n", "--secid",    &secid))  continue;
+      if (opts.match("-x", "--xchg",     &xchg))     continue;
+      if (opts.match("-s", "--symbol",   &symbol))   continue;
+      if (opts.match("-i", "--instr",    &instr))    continue;
+      if (opts.match("-n", "--secid",    &secid))    continue;
+      if (opts.match("-t", "--tzone",    &tz))       continue;
       if (opts.match("-y", "--date",     &dtstr))  {
         if (dtstr.size() != 8)
           Usage("Invalid date format (expected: YYYYMMDD)");
@@ -134,6 +136,27 @@ int main(int argc, char* argv[])
   if (secid == 0)       Usage("Missing required option -n");
 
   if (outdir.empty())   outdir = utxx::path::dirname(filename);
+
+  struct tm lt = {0};
+  time_t     t = date;
+
+  bool have_tz = !tz.empty();
+
+  if (have_tz)
+    setenv("TZ", tz.c_str(), 1);
+
+  localtime_r(&t, &lt);
+
+  if (have_tz && lt.tm_zone[0] == '\0')
+    UTXX_THROW_RUNTIME_ERROR("Invalid time zone ", tz);
+  else
+    tz = lt.tm_zone;
+
+  auto tz_offset = lt.tm_gmtoff;
+
+  if (debug)
+    cerr << "UTC offset: " << tz_offset << "s (" << (tz_offset/3600) << "h) "
+         << tz << endl;
 
   auto file = fopen(filename.c_str(), "r");
 
@@ -194,13 +217,15 @@ int main(int argc, char* argv[])
       valid = true;
 
       output.Open<OpenMode::Write>
-        (outdir, subdirs, xchg, symbol, instr, secid, date, 3, 0.05, 0664);
+        (outdir, subdirs, xchg, symbol, instr, secid, date, tz, tz_offset,
+         3,      0.05,    0664);
 
       output.WriteStreamsMeta({StreamType::Quotes, StreamType::Trade});
-      // 1min candles from 9am to 15pm KRW time
-      auto tz_offset = 3600*9;
+      // 1min candles from 9:00am to 15:00pm KST time
+      auto start_tm  =  9*3600 - output.TZOffset();
+      auto end_tm    = 15*3600 + 60 - output.TZOffset();
       output.WriteCandlesMeta
-        ({CandleHeader(60, 3600*9 - tz_offset, 3600*15 - tz_offset)});
+        ({CandleHeader(60, start_tm, end_tm)});
 
       output.Flush();
     }

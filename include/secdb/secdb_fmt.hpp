@@ -56,6 +56,7 @@ enum class StreamType : char {
   , Order
   , Summary
   , Message
+  , INVALID
 };
 
 using PriceT = int;
@@ -65,9 +66,13 @@ inline uuid UUID(std::string const& a) { return boost::uuids::string_generator()
 std::string ToString(uuid const& a);
 
 //------------------------------------------------------------------------------
-// SecDB data format (version 1) reader/writer
+// SecDB data format constants
 //------------------------------------------------------------------------------
-static constexpr uint VERSION() { return 1; }
+/// SecDB version
+static constexpr uint VERSION()           { return 1;          }
+/// SecDB marker indicating beginning of stream data section
+static constexpr uint BEGIN_STREAM_DATA() { return 0xABBABABA; }
+
 
 //------------------------------------------------------------------------------
 // Bookmark class that saves/restores current file position
@@ -86,7 +91,8 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// File header
+/// File header
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format#file-header
 //------------------------------------------------------------------------------
 struct Header  {
   /// Minimum expected header length
@@ -94,34 +100,48 @@ struct Header  {
 
   Header() {}
 
-  uint32_t    Version()     const { return m_version;       }
-  time_t      Date()        const { return m_date;          }
-  int         Depth()       const { return m_depth;         }
+  uint32_t              Version()     const { return m_version;       }
+
+  /// UTC Date of the file
+  time_t                Date()        const { return m_date;          }
+  /// UTC Midnight corresponding to the file date
+  time_t                Midnight()    const { return m_date;          }
+
+  int                   TZOffset()    const { return m_tz_offset;     }
+  int                   Depth()       const { return m_depth;         }
 
   /// Minimal price step (e.g. 0.0001)
-  double      PxStep()      const { return m_px_step;       }
+  double                PxStep()      const { return m_px_step;       }
   /// Price scale (e.g. 10000)
-  int         PxScale()     const { return m_px_scale;      }
+  int                   PxScale()     const { return m_px_scale;      }
   /// Price precision in digits after the decimal point (e.g. 4)
-  int         PxPrecision() const { return m_px_precision;  }
-  std::string Exchange()    const { return m_exchange;      }
-  std::string Symbol()      const { return m_symbol;        }
-  std::string Instrument()  const { return m_instrument;    }
-  long        SecID()       const { return m_secid;         }
-  uuid        UUID()        const { return m_uuid;          }
+  int                   PxPrecision() const { return m_px_precision;  }
+  std::string const&    Exchange()    const { return m_exchange;      }
+  std::string const&    Symbol()      const { return m_symbol;        }
+  std::string const&    Instrument()  const { return m_instrument;    }
+  long                  SecID()       const { return m_secid;         }
+  uuid                  UUID()        const { return m_uuid;          }
+
+  std::string const&    TZName()      const { return m_tz_name;       }
+  void                  TZName(const char* a)      { m_tz_name = a;   }
+
+  std::string           TZ()          const;
 
   /// Set values of file header
+  /// @param a_tz_name local time zone name
   void Set
   (
-    int                a_ver,
-    std::string const& a_xchg,
-    std::string const& a_symbol,
-    std::string const& a_instr,
-    long               a_secid,
-    time_t             a_date,
-    uint8_t            a_depth,
-    double             a_px_step,
-    uuid        const& a_uuid = boost::uuids::random_generator()()
+    int                 a_ver,
+    std::string const&  a_xchg,
+    std::string const&  a_symbol,
+    std::string const&  a_instr,
+    long                a_secid,
+    time_t              a_date,
+    std::string const&  a_tz_name,
+    int                 a_tz_offset,
+    uint8_t             a_depth,
+    double              a_px_step,
+    uuid        const&  a_uuid   = boost::uuids::random_generator()()
   );
 
   /// Read header from a file descriptor
@@ -139,6 +159,8 @@ private:
   std::string m_instrument;
   long        m_secid         = 0;
   time_t      m_date          = 0;
+  int         m_tz_offset     = 0;
+  std::string m_tz_name;
   int         m_depth         = 10;
   double      m_px_step       = 0.01;
   int         m_px_scale      = 100;
@@ -149,6 +171,8 @@ private:
 //------------------------------------------------------------------------------
 /// Metadata about streams contained in the file
 //------------------------------------------------------------------------------
+// https://github.com/saleyn/secdb/wiki/Data-Format#streamsmeta-streams-metadata
+//------------------------------------------------------------------------------
 struct StreamsMeta {
   static constexpr uint8_t CODE() { return 0x1; }
 
@@ -157,6 +181,11 @@ struct StreamsMeta {
     GZip    // Gzip compression
   };
 
+  //----------------------------------------------------------------------------
+  /// Stream Metadata
+  //----------------------------------------------------------------------------
+  // https://github.com/saleyn/secdb/wiki/Data-Format#streammeta-stream-metadata
+  //----------------------------------------------------------------------------
   struct StreamMeta {
     static constexpr uint8_t CODE() { return 0x2; }
 
@@ -204,10 +233,13 @@ struct StreamsMeta {
 
   int           Count()           const { return m_streams.size();  }
 
+  /// Read StreamsMeta from file
+  /// This method must be called right after reading the file's header!
+  void Read(FILE* a_file);
   /// Write StreamsMeta to file
-  int Write(FILE* a_file, int a_debug = 0);
+  int  Write(FILE* a_file, int a_debug = 0);
   /// Update beginning of data offset in the StreamsMeta header
-  int WriteDataOffset(FILE* a_file, uint a_data_offset);
+  int  WriteDataOffset(FILE* a_file, uint a_data_offset);
 
 private:
   CompressT     m_compression     = CompressT::None;
@@ -219,6 +251,7 @@ private:
 
 //------------------------------------------------------------------------------
 /// Candle
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format#candle-candle-data
 //------------------------------------------------------------------------------
 struct Candle {
 
@@ -269,6 +302,8 @@ private:
 //------------------------------------------------------------------------------
 /// Candle Block Metadata
 //------------------------------------------------------------------------------
+// https://github.com/saleyn/secdb/wiki/Data-Format#candleheader-candle-metadata
+//------------------------------------------------------------------------------
 struct CandleHeader {
   static constexpr uint8_t CODE() { return 0x4; }
 
@@ -281,24 +316,24 @@ struct CandleHeader {
   CandleHeader
   (
     uint16_t a_resolution,
-    uint     a_start_time,
-    uint     a_end_time,
+    int      a_start_time,
+    int      a_end_time,
     uint32_t a_data_offset = 0
   )
     : m_resolution (a_resolution)
     , m_start_time (a_start_time)
     , m_data_offset(a_data_offset)
-    , m_candles    ((a_end_time - a_start_time) / a_resolution)
+    , m_candles    (CalcSize(a_start_time, a_end_time, a_resolution))
   {
     assert(a_end_time > a_start_time);
   }
 
   /// Update m_data_offset if \a a_ts corresponds to the beginning of candle
-  void UpdateDataOffset(uint a_ts, uint64_t a_data_offset);
+  void UpdateDataOffset(int a_ts, uint64_t a_data_offset);
 
   /// Update the candle corresponding to \a a_ts time
   /// @return true on success or false if \a a_ts is outside of range
-  bool UpdateCandle(uint a_ts, PriceT a_px, int a_qty);
+  bool UpdateCandle(int a_ts, PriceT a_px, int a_qty);
 
   /// Update the file with the current candles data
   /// @return true on success or false if there was a problem writing data
@@ -315,18 +350,24 @@ struct CandleHeader {
   /// The Candle last updated by the UpdateCandle() call
   Candle*           LastUpdated()             const { return m_last_updated;}
   void              LastUpdated(Candle* a)          { m_last_updated = a;   }
-  Candle*           TimeToCandle(uint a_ts);
+  Candle*           TimeToCandle(int a_ts);
 
+  /// Convert candle index \a a_idx to StartTime since UTC
+  int               CandleToTime(uint a_idx) const;
 private:
   uint16_t   m_resolution;
-  uint       m_start_time;
+  int        m_start_time;
   size_t     m_data_offset;
   Candle*    m_last_updated = nullptr; // Last updated candle
   CandlesVec m_candles;
+
+  static int CalcSize(int a_start_time, int a_end_time, uint16_t a_resolution);
 };
 
 //------------------------------------------------------------------------------
 /// Candle Block Metadata
+//------------------------------------------------------------------------------
+// https://github.com/saleyn/secdb/wiki/Data-Format#candlesmeta-candles-metadata
 //------------------------------------------------------------------------------
 struct CandlesMeta {
   static constexpr uint8_t CODE() { return 0x3; }
@@ -342,16 +383,24 @@ struct CandlesMeta {
   CandleHeaderVec&        Headers()       { return m_candle_headers; }
   CandleHeaderVec const&  Headers() const { return m_candle_headers; }
 
-  int Write(FILE* a_file, int a_debug = 0);
+  /// Read StreamsMeta from file.
+  /// This method must be called right after reading the file's header!
+  void Read(FILE* a_file);
 
-  /// @param a_ts second since midnight
+  /// Write CandlesMeta and Candle data to file.
+  /// It's permissible to call this method when Candle data is empty, in which
+  /// case it'll reserve space in file for updating the candles later using
+  /// CommitCandles() method.
+  int  Write(FILE* a_file, int a_debug = 0);
+
+  /// @param a_ts second since UTC midnight
   /// @param a_data_offset position of file corrsponding to \a a_ts second
-  void UpdateDataOffset(uint a_ts, uint64_t a_data_offset);
+  void UpdateDataOffset(int a_ts, uint64_t a_data_offset);
 
   /// Update the candles corresponding to \a a_ts time in each candle resolution
   /// @param a_ts time in seconds since midnight
   /// @return true on success or false if \a a_ts is outside of range
-  bool UpdateCandles(uint a_ts, PriceT a_px, int a_qty);
+  void UpdateCandles(int a_ts, PriceT a_px, int a_qty);
 
   /// Update the file with the current candles data for all candle resolutions
   /// @return true on success or false if there was a problem writing data
@@ -382,6 +431,7 @@ private:
 
 //------------------------------------------------------------------------------
 /// Representation of seconds from midnight
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format#seconds-stream
 //------------------------------------------------------------------------------
 struct SecondsSample : public StreamBase {
   SecondsSample() {}
@@ -393,21 +443,7 @@ struct SecondsSample : public StreamBase {
 
   int Time() const { return m_time; }
 
-  template <bool TimeAsLEB>
-  int Write(FILE* a_file) {
-    char  buf[4];
-    char* p = buf;
-    StreamBase::Write(p);
-    if (TimeAsLEB) {
-      utxx::encode_sleb128(m_time, p);
-    } else {
-      long tm  = m_time;
-      *p++ =  tm        & 0xFF;
-      *p++ = (tm >>  8) & 0xFF;
-      *p++ = (tm >> 16) & 0xFF;
-    }
-    return fwrite(buf, 1, sizeof(buf), a_file) == sizeof(buf) ? sizeof(buf):-1;
-  }
+  int Write(FILE* a_file);
 private:
   uint m_time : 24;
 };
@@ -426,6 +462,7 @@ using PxLevels = std::array<PxLevel<PxT>, MaxDepth>;
 
 //------------------------------------------------------------------------------
 /// Representation of Quote sample
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format#quotes-stream
 //------------------------------------------------------------------------------
 template <uint MaxDepth, typename PxT>
 struct QuoteSample : public StreamBase {
@@ -454,6 +491,7 @@ private:
 
 //------------------------------------------------------------------------------
 /// Representation of Trade sample
+/// \see https://github.com/saleyn/secdb/wiki/Data-Format#trade-stream
 //------------------------------------------------------------------------------
 struct TradeSample : public StreamBase {
   struct FieldMask {

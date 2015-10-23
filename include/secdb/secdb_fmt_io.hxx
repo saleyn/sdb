@@ -76,6 +76,14 @@ Filename
 // Open SecDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
+inline BaseSecDBFileIO<MaxDepth>::
+BaseSecDBFileIO(std::string const& a_name, int a_debug)
+{
+  Open(a_name, a_debug);
+}
+
+//------------------------------------------------------------------------------
+template <uint MaxDepth>
 template <OpenMode Mode>
 void BaseSecDBFileIO<MaxDepth>::Open
 (
@@ -86,6 +94,8 @@ void BaseSecDBFileIO<MaxDepth>::Open
   std::string const& a_instr,
   long               a_secid,
   time_t             a_date,
+  std::string const& a_tz_name,
+  int                a_tz_offset,
   uint8_t            a_depth,
   double             a_px_step,
   int                a_perm,
@@ -97,7 +107,9 @@ void BaseSecDBFileIO<MaxDepth>::Open
 
   if (Mode == OpenMode::Write && size < Header::MIN_FILE_SIZE()) {
     try {
-      WriteHeader(a_xchg,a_sym,a_instr,a_secid,a_date,a_depth,a_px_step,a_uuid);
+      WriteHeader(a_xchg,  a_sym,     a_instr, a_secid,
+                  a_date,  a_tz_name, a_tz_offset,
+                  a_depth, a_px_step, a_uuid);
     }
     catch (std::exception const& e) {
       UTXX_THROW_RUNTIME_ERROR
@@ -111,8 +123,9 @@ void BaseSecDBFileIO<MaxDepth>::Open
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 inline void BaseSecDBFileIO<MaxDepth>::
-Open(std::string const& a_name)
+Open(std::string const& a_name, int a_debug)
 {
+  m_debug  = a_debug;
   int size = DoOpen<OpenMode::Read>(a_name.c_str(), 0640);
 
   try   { m_header.Read(m_file, size); }
@@ -120,6 +133,22 @@ Open(std::string const& a_name)
     UTXX_THROW_RUNTIME_ERROR
       ("Error reading from file ", a_name, ": ", e.what());
   }
+
+  if (a_debug) {
+    std::cerr << "File: " << a_name << std::endl;
+    m_header.Print(std::cerr);
+  }
+
+  if (m_header.Version() != VERSION())
+    UTXX_THROW_RUNTIME_ERROR
+      ("SecDB version ", m_header.Version(), " not supported (expected: ",
+       VERSION(), ')');
+
+  m_streams_meta.Read(m_file);
+  m_candles_meta.Read(m_file);
+
+  if (a_debug)
+    PrintCandles();
 }
 
 //------------------------------------------------------------------------------
@@ -174,6 +203,9 @@ Close()
   if (m_mode == OpenMode::Write)
     m_candles_meta.CommitCandles(m_file);
 
+  if (m_debug > 1)
+    PrintCandles();
+
   ::fclose(m_file);
   m_file = nullptr;
 
@@ -206,6 +238,8 @@ WriteHeader
   std::string const& a_instr,
   long               a_secid,
   time_t             a_date,
+  std::string const& a_tz_name,
+  int                a_tz_offset,
   uint8_t            a_depth,
   double             a_px_step,
   uuid        const& a_uuid
@@ -220,8 +254,8 @@ WriteHeader
     UTXX_THROW_RUNTIME_ERROR
       ("Cannot write SecDB header to non-empty file ", m_filename);
 
-  m_header.Set(VERSION(), a_xchg, a_symbol, a_instr,
-               a_secid,   a_date, a_depth,  a_px_step, a_uuid);
+  m_header.Set(VERSION(), a_xchg,    a_symbol,    a_instr,  a_secid,
+               a_date,    a_tz_name, a_tz_offset, a_depth,  a_px_step, a_uuid);
 
   try { sz = m_header.Write(m_file); }
   catch (std::exception const& e) {
@@ -302,9 +336,7 @@ template <uint MaxDepth>
 bool BaseSecDBFileIO<MaxDepth>::
 WriteSeconds(time_val a_now)
 {
-  using SecondsSample = SecondsSample;
-
-  auto midnight_ns = a_now - Date();
+  auto midnight_ns = a_now - Midnight();
   int  usec        = midnight_ns.usec(); // Microsecs
   m_last_sec       = midnight_ns.sec();  // Seconds since midnight
   m_last_ts        = a_now;
@@ -314,8 +346,8 @@ WriteSeconds(time_val a_now)
   if (m_next_second == 0 || m_last_sec >= m_next_second) {
     // Possibly update candles with current data offset at this second
     m_candles_meta.UpdateDataOffset(m_last_sec, ftell(m_file));
-    // Write the new SecondsSample
-    if (!SecondsSample(m_last_sec).Write<false>(m_file))
+    // Write the new SecondsSample to file
+    if (!SecondsSample(m_last_sec).Write(m_file))
       UTXX_THROW_IO_ERROR(errno, "Error writing seconds to file ",
                           m_filename, " at ", ftell(m_file));
     m_next_second = m_last_sec+1;
@@ -438,6 +470,46 @@ WriteTrade
   if (sz < 0)
     UTXX_THROW_IO_ERROR
       (errno, "Error writing a trade ", tr.ToString(), " to file ", m_filename);
+}
+
+//------------------------------------------------------------------------------
+template <uint MaxDepth>
+void BaseSecDBFileIO<MaxDepth>::
+PrintCandles() const
+{
+  std::cerr << "  Candle Resolutions: " << m_candles_meta.Headers().size()
+            << std::endl;
+  uint idx = 0;
+  for (auto& ch : m_candles_meta.Headers()) {
+    auto n = ch.Candles().size();
+    int  s = ch.StartTime() + TZOffset();
+    int  e = s + ch.Resolution()*n;
+    fprintf(stderr, "  Resolution: %ds %02d:%02d - %02d:%02d %s (UTC: %ld)\n",
+            ch.Resolution(),
+            s / 3600, s % 3600 / 60,
+            e / 3600, e % 3600 / 60,
+            TZ().c_str(), Date() + ch.StartTime());
+    std::cerr <<
+      "#Time    Open   High   Low    Close     BuyVol   SellVol DataOffset\n";
+
+    for (auto& c : ch.Candles()) {
+      int  ts = ch.CandleToTime(idx++) + TZOffset();
+      uint h  = ts / 3600, m = ts % 3600 / 60, s = ts % 60;
+      //if (c.DataOffset() == 0)
+      //  continue;
+      char buf[16];
+      sprintf(buf, "%02d:%02d:%02d ", h,m,s);
+      std::cerr << buf
+                << std::setprecision(Header().PxPrecision())     << std::fixed
+                << NormalPxToDouble(c.Open())    << ' '
+                << NormalPxToDouble(c.High())    << ' '
+                << NormalPxToDouble(c.Low())     << ' '
+                << NormalPxToDouble(c.Close())   << ' '
+                << std::setw(9)   << c.BVolume() << ' '
+                << std::setw(9)   << c.SVolume() << " ["
+                << c.DataOffset() << "]\n";
+    }
+  }
 }
 
 } // namespace secdb

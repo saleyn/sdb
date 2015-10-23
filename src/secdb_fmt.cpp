@@ -35,48 +35,66 @@ int Header::Read(FILE* a_file, size_t a_file_size)
 {
   assert(a_file);
 
-  int  y, m, d;
-  char xchg[32], symb[64], instr[64], uuid[64];
+  int  y, m, d, tz_hh, tz_mm;
+  char xchg[32], symb[64], instr[64], uuid[64], tz[8], tznm[64];
 
   if (fseek(a_file, 0, SEEK_SET) < 0)
     throw std::runtime_error
       (std::string("Cannot rewind to beginning of file header: ") +
        strerror(errno));
 
+  // For some reason fscanf doesn't parse the string that ends with ")\n"
+  // correctly, so we exclude the ')' in the time zone name ('utc-date')
+  // and remove it by hand later:
   int n = fscanf(a_file,
     "#!/usr/bin/env secdb\n"
     "version:  %u\n"
-    "date:     %d-%d-%d\n"
+    "utc-date: %d-%d-%d (%s %s\n"
     "exchange: %s\n"
     "symbol:   %s\n"
     "instr:    %s\n"
     "secid:    %ld\n"
     "depth:    %d\n"
     "px-step:  %lf\n"
-    "uuid:     %s\n",
-    &m_version, &y, &m, &d, xchg, symb, instr,
+    "uuid:     %s",
+    &m_version, &y, &m, &d, tz, tznm, xchg, symb, instr,
     &m_secid,   &m_depth,   &m_px_step, uuid);
 
-  if (n != 11)
+  if (n != 13)
     throw std::runtime_error("Invalid SecDB header!");
 
-  m_date         = utxx::time_val::universal_time(y, m, d, 0, 0, 0).sec();
-  m_exchange     = xchg;
-  m_symbol       = symb;
-  m_instrument   = instr;
-  m_uuid         = boost::uuids::string_generator()(uuid);
+  n = ftell(a_file);
+
+  m_date       = utxx::time_val::universal_time(y, m, d, 0, 0, 0).sec();
+  m_exchange   = xchg;
+  m_symbol     = symb;
+  m_instrument = instr;
+  m_uuid       = boost::uuids::string_generator()(uuid);
+
+  int tzlen    = strlen(tznm);
+  if (strlen(tz) != 5 || tzlen < 3 || tznm[tzlen-1] != ')')
+    throw std::runtime_error
+      (std::string("SecDB header - invalid timezone format: ") + tz);
+
+  utxx::fast_atoi(tz+1, tz+3, tz_hh);
+  utxx::fast_atoi(tz+3, tz+5, tz_mm);
 
   m_px_scale     = m_px_step  != 0.0 ? (int)(1.0 / m_px_step + 0.5) : 0;
   m_px_precision = m_px_scale ? utxx::math::log(m_px_scale,     10) : 0;
-
-  char buf[128];
+  m_tz_offset    = (tz[0] == '-' ? -1 : 1) * (tz_hh*3600 + tz_mm*60);
+  m_tz_name      = std::string(tznm, tzlen-1); // exclude closing ')'
+  bool eol       = false;
 
   while (true) {
-    if (!fgets(buf, sizeof(buf), a_file))
+    if ((n = fgetc(a_file)) < 0)
       throw std::runtime_error
         (std::string("Error reading SecDB header: ")+ strerror(errno));
-    if (strcmp("", buf) == 0)
+    if (n != '\n')
+      eol = false;
+    else if (eol)
       break;
+    else
+      eol = true;
   }
 
   return ftell(a_file);
@@ -96,7 +114,7 @@ int Header::Write(FILE* a_file, int a_debug)
   int rc = fprintf(a_file,
     "#!/usr/bin/env secdb\n"
     "version:  %u\n"
-    "date:     %d-%02d-%02d\n"
+    "utc-date: %d-%02d-%02d (%s)\n"
     "exchange: %s\n"
     "symbol:   %s\n"
     "instr:    %s\n"
@@ -105,7 +123,7 @@ int Header::Write(FILE* a_file, int a_debug)
     "px-step:  %.*lf\n"
     "uuid:     %s\n\n",
     m_version,
-    y,m,d,
+    y,m,d, TZ().c_str(),
     m_exchange.c_str(),
     m_symbol.c_str(),
     m_instrument.c_str(),
@@ -130,8 +148,9 @@ std::ostream& Header::Print(std::ostream& out, const std::string& a_indent)
   return out
     << a_indent << "Version....: " << m_symbol       << '\n'
     << a_indent << "Date.......: " << utxx::timestamp::to_string
-                                      (time_val(utxx::secs(m_date)), utxx::DATE)
-                                   << '\n'
+                                      (time_val(utxx::secs(m_date)),
+                                       utxx::DATE, true)
+                                   << " UTC (" << TZ().c_str() << ")\n"
     << a_indent << "Exchange...: " << m_exchange     << '\n'
     << a_indent << "Symbol.....: " << m_symbol       << '\n'
     << a_indent << "Instrument.: " << m_instrument   << '\n'
@@ -144,6 +163,17 @@ std::ostream& Header::Print(std::ostream& out, const std::string& a_indent)
 }
 
 //------------------------------------------------------------------------------
+std::string Header::TZ() const
+{
+  char c = m_tz_offset < 0 ? '-' : '+';
+  int  h = m_tz_offset / 3600;
+  int  m = m_tz_offset % 3600 / 60;
+  char buf[16];
+  sprintf(buf, "%c%02d%02d %s", c, h, m, TZName().c_str());
+  return  buf;
+}
+
+//------------------------------------------------------------------------------
 void Header::Set
 (
   int                a_ver,
@@ -152,6 +182,8 @@ void Header::Set
   std::string const& a_instr,
   long               a_secid,
   time_t             a_date,
+  std::string const& a_tz_name,
+  int                a_tz_offset,
   uint8_t            a_depth,
   double             a_px_step,
   uuid        const& a_uuid
@@ -162,18 +194,32 @@ void Header::Set
   m_symbol         = a_symbol;
   m_instrument     = a_instr;
   m_secid          = a_secid;
-  m_date           = a_date;
+  m_date           = a_date - (a_date % 86400);
   m_depth          = a_depth;
   m_px_step        = a_px_step;
   m_px_scale       = m_px_step  != 0.0 ? (int)(1.0 / m_px_step + 0.5) : 0;
   m_px_precision   = m_px_scale ? utxx::math::log(m_px_scale,     10) : 0;
+  m_tz_offset      = a_tz_offset;
+  m_tz_name        = a_tz_name;
   m_uuid           = a_uuid;
+}
+
+//==============================================================================
+// SecondsSample
+//==============================================================================
+int SecondsSample::Write(FILE* a_file)
+{
+  char  buf[4];
+  char* p = buf;
+  StreamBase::Write(p);
+  utxx::encode_sleb128(m_time, p);
+
+  return fwrite(buf, 1, sizeof(buf), a_file) == sizeof(buf) ? sizeof(buf):-1;
 }
 
 //==============================================================================
 // StreamsMeta
 //==============================================================================
-
 int StreamsMeta::Write(FILE* a_file, int a_debug)
 {
   std::vector<char> buf;
@@ -201,20 +247,68 @@ int StreamsMeta::Write(FILE* a_file, int a_debug)
   return (fwrite(&buf[0], 1, sz, a_file) == sz) ? sz : -1;
 }
 
+//------------------------------------------------------------------------------
 int StreamsMeta::WriteDataOffset(FILE* a_file, uint a_data_offset)
 {
     Bookmark bm(a_file, m_data_offset_pos);
     constexpr size_t sz = sizeof(uint);
     char buf[sz];
-    utxx::store_be(buf, a_data_offset);
+    utxx::store_le(buf, a_data_offset);
     return (fwrite(&buf[0], 1, sz, a_file) == sz) ? sz : -1;
+}
+
+//------------------------------------------------------------------------------
+void StreamsMeta::Read(FILE* a_file)
+{
+  auto pos = ftell(a_file);
+  if  (pos < 0) throw utxx::io_error(errno, "cannot determine curr file offset");
+  m_data_offset_pos = pos + 2;
+
+  std::vector<char> buf(256);
+  const char*  p = &buf[0];
+  int n = fread((void*)p, 1, 7, a_file);
+  if (n < 7)
+    throw utxx::io_error(errno, "cannot read StreamsMeta");
+  if (*p++ != CODE())
+    throw utxx::runtime_error("invalid StreamsMeta code (", (uint)buf[0],
+                              ", expected: ", (uint)CODE(), ')');
+  m_compression = CompressT(*p++);
+  m_data_offset = utxx::get32le(p);
+  int     count = *(uint8_t*)p++;  // Stream count
+
+  p = &buf[0];
+  n = fread((void*)p, 1, count*2, a_file);
+
+  if (n != count*2 || n > 128)
+    throw utxx::io_error
+      (errno, "cannot read StreamMeta (n=", n, ", count=", count, ')');
+
+  m_streams.clear();
+
+  for (int i=0; i < count; i++) {
+    if (*p++ != StreamMeta::CODE())
+      throw utxx::runtime_error("invalid StreamsMeta::Header");
+    if (*p >= int(StreamType::INVALID))
+      throw utxx::runtime_error("invalid StreamType ", int(*p));
+
+    m_streams.emplace_back(StreamType(*p++));
+  }
 }
 
 //==============================================================================
 // CandleHeader
 //==============================================================================
+int CandleHeader::CalcSize(int a_start_time, int a_end_time, uint16_t a_res)
+{
+  int diff = a_end_time - a_start_time;
+  assert (diff > 0);
+  int n = diff % a_res;
+  if (n > 0) diff += n;
+  return  diff / a_res;
+}
 
-bool CandleHeader::UpdateCandle(uint a_ts, PriceT a_px, int a_qty)
+//------------------------------------------------------------------------------
+bool CandleHeader::UpdateCandle(int a_ts, PriceT a_px, int a_qty)
 {
   Candle* c = TimeToCandle(a_ts);
   if (!c)
@@ -236,13 +330,8 @@ bool CandleHeader::UpdateCandle(uint a_ts, PriceT a_px, int a_qty)
 //------------------------------------------------------------------------------
 bool CandleHeader::CommitCandles(FILE* a_file)
 {
-  Bookmark b(a_file);  // keeps current file position intact
-
-  // Go to m_data_offset, which is the offset to the beginning of Candles data
-  // in the file:
-  if (utxx::unlikely(!m_data_offset || fseek(a_file, m_data_offset, SEEK_SET) < 0))
-    return false;
-
+  // keeps current file position intact and jump to m_data_offset
+  Bookmark b(a_file, m_data_offset);
   for (auto& c : m_candles) {
     char buf[80];
     auto p = &buf[0];
@@ -253,8 +342,8 @@ bool CandleHeader::CommitCandles(FILE* a_file)
     utxx::put32le(p, c.BVolume());
     utxx::put32le(p, c.SVolume());
     utxx::put64le(p, c.DataOffset());
-    size_t sz = p - buf;
-    assert(sz == sizeof(Candle));
+    size_t sz =   p - buf;
+    assert(sz ==  sizeof(Candle));
     if (fwrite(&c, 1, sz, a_file) != sz)
       return false;
   }
@@ -265,7 +354,7 @@ bool CandleHeader::CommitCandles(FILE* a_file)
 //==============================================================================
 // CandlesMeta
 //==============================================================================
-void CandlesMeta::UpdateDataOffset(uint a_ts, uint64_t a_data_offset)
+void CandlesMeta::UpdateDataOffset(int a_ts, uint64_t a_data_offset)
 {
   for (auto& c : m_candle_headers) {
     Candle* last_candle = c.LastUpdated();
@@ -281,13 +370,10 @@ void CandlesMeta::UpdateDataOffset(uint a_ts, uint64_t a_data_offset)
 }
 
 //------------------------------------------------------------------------------
-bool CandlesMeta::UpdateCandles(uint a_ts, PriceT a_px, int a_qty)
+void CandlesMeta::UpdateCandles(int a_ts, PriceT a_px, int a_qty)
 {
   for (auto& c : m_candle_headers)
-    if (utxx::unlikely(!c.UpdateCandle(a_ts, a_px, a_qty)))
-      return false;
-
-  return true;
+    c.UpdateCandle(a_ts, a_px, a_qty);
 }
 
 //------------------------------------------------------------------------------
@@ -365,6 +451,87 @@ int CandlesMeta::Write(FILE* a_file, int a_debug)
   }
 
   return ftell(a_file) - start_pos;
+}
+
+//------------------------------------------------------------------------------
+void secdb::CandlesMeta::Read(FILE* a_file)
+{
+  std::vector<char> buf(256);
+  const char* p  = &buf[0];
+
+  auto n = fread((void*)p, 1, 4, a_file);
+  if  (n < 4)
+    throw utxx::io_error(errno, "cannot read CandlesMeta");
+  if (*p++ != CODE())
+    throw utxx::runtime_error("invalid StreamsMeta code (", (uint)*(p-1),
+                              ", expected: ", (uint)CODE(), ')');
+  if (*p++ != 0)
+    throw utxx::runtime_error("invalid StreamsMeta filler (", (uint)*(p-1), ')');
+
+  size_t count = utxx::get16le(p);
+
+  if (buf.size() < 16*count)
+    buf.resize(16*count);
+
+  p = &buf[0];
+
+  if (fread((void*)p, 1, count*16, a_file) != count*16)
+    throw utxx::io_error(errno, "invalid file format (missing CandleHeaders)");
+
+  m_candle_headers.clear();
+
+  std::vector<int> candle_counts;
+
+  for (uint i = 0; i < count; ++i) {
+    if (*p++ != CandleHeader::CODE())
+      throw utxx::runtime_error("invalid CandleMeta code (", (uint)*(p-1),
+                                ", expected: ", (uint)CandleHeader::CODE(), ')');
+    if (*p++ != 0)
+      throw utxx::runtime_error("invalid StreamsMeta filler (", (uint)*(p-1), ')');
+
+    uint16_t resolution  =      utxx::get16le(p);
+    int      start_time  = (int)utxx::get32le(p);
+    uint32_t candle_cnt  =      utxx::get32le(p);
+    uint32_t data_offset =      utxx::get32le(p);
+
+    m_candle_headers.emplace_back
+      (resolution, start_time, start_time + candle_cnt*resolution, data_offset);
+
+    candle_counts.push_back(candle_cnt);
+  }
+
+  for (uint i = 0; i < count; ++i) {
+    auto&  ch = m_candle_headers[i];
+    uint    n = candle_counts[i];
+
+    buf.resize(n*sizeof(Candle));
+
+    p = &buf[0];
+
+    if (fread((void*)p, 1, n*sizeof(Candle), a_file) != n*sizeof(Candle))
+      throw utxx::io_error
+        (errno, "invalid file format (cannot read candles of resolution=",
+         ch.Resolution(), ")");
+
+    for (uint j=0; j < n; ++j) {
+      auto op = utxx::get32le(p);
+      auto hi = utxx::get32le(p);
+      auto lo = utxx::get32le(p);
+      auto cl = utxx::get32le(p);
+      auto bv = utxx::get32le(p);
+      auto sv = utxx::get32le(p);
+      auto of = utxx::get64le(p);
+
+      ch.Candles()[j] = Candle(op, hi, lo, cl, bv, sv, of);
+    }
+  }
+
+  p = &buf[0];
+  auto marker = uint(utxx::get32le(p));
+
+  if (fread((void*)p, 1, 4, a_file) != 4 || marker == BEGIN_STREAM_DATA())
+    throw utxx::io_error
+      (errno, "invalid file data marker at ", utxx::itoa_hex(marker));
 }
 
 //==============================================================================

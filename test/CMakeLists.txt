@@ -14,6 +14,6 @@ target_link_libraries(
     boost_unit_test_framework
 )
 
-ADD_DEPENDENCIES(test-secdb secdb)
+add_dependencies(test-secdb secdb)
 
 install(TARGETS test-secdb  RUNTIME DESTINATION test)
