@@ -44,6 +44,19 @@ void Usage(std::string const& a_text = "")
        << "  -i Instr             - exchange-specific instrument name\n"
        << "  -n|--secid SecID     - exchange-specific security id\n"
        << "  -y|--date YYYYMMDD   - date of market data in this file\n"
+       << "\nExample:\n\n"
+       << "Convert data.txt to /tmp/20150626.KRX.KR4101.KR4101K90008.sdb:\n"
+       << "  " << utxx::path::program::name()
+       << " -f data.txt -o /tmp -q -x KRX -s KR4101 -i KR4101K90008 -n 4101 "
+       << "-y 20150626\n\n"
+       << "Source file (data.txt):\n"
+       << "# UTCTime     |    Bid L1BVo L2BVo L3BVo |    Ask L1AVo L2AVo L3AVo | LstPx LstQty | NBids NAsks TotBV TotAV\n"
+       << "1435276800566 | 253.70    81    11   118 | 253.80    15    16    26 | 253.80     1 |   918  1174  7014  9164\n"
+       << "1435276800566 | 253.70    81    11   118 | 253.80    14    16    26 | 253.80     1 |   918  1174  7014  9163\n"
+       << "1435276800567 | 253.70    81    11   118 | 253.80    14    16    26 |   0.00     0 |   918  1175  7014  9164\n"
+       << "1435276800588 | 253.70    81    11   118 | 253.80    13    16    26 | 253.80     1 |   921  1174  7017  9163\n"
+       << "1435276800588 | 253.70    81    11   118 | 253.80    13    16    26 |   0.00     0 |   921  1175  7017  9164\n"
+       << "1435276800600 | 253.70    31    11   118 | 253.80    13    16    26 | 253.70   -50 |   907  1175  6975  9164\n"
        << "\n";
   exit(1);
 }

@@ -6,6 +6,7 @@ set(cmake_generated
     ${CMAKE_BINARY_DIR}/CMakeFiles
     ${CMAKE_BINARY_DIR}/src
     ${CMAKE_BINARY_DIR}/test
+    ${CMAKE_BINARY_DIR}/Testing
 )
 
 foreach(file ${cmake_generated})

@@ -21,7 +21,7 @@ SecDB commercial license
 If you do not license the source code under the GPL, but still like to include SecDB in your
 projects then you need to purchase a commercial license.
 
-The Commercial License is an agreement between Omnibius, LLC, and an organizations that does
+The Commercial License is an agreement between Omnibius, LLC, and an organization that does
 not want to release its application source code. Commercially licensed customers get a 
 commercially supported product with assurances from Omnibius, LLC. Commercially licensed users
 are also free from the requirement of making their own application Open Source.
