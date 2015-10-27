@@ -84,7 +84,7 @@ Read(const char* a_buf, size_t a_sz, bool a_is_delta, PxT& a_last_px)
   assert((*a_buf & 0x7F) == s_stream_id);
 
   a_buf++;
-  m_time = uleb128_decode(a_buf, end);
+  m_time = uleb128_decode(a_buf);
 
   if (a_buf >= end)
     return 0;     // Not enough data

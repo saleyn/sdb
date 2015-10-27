@@ -229,7 +229,7 @@ int SecondsSample::Read(const char* a_buf, size_t a_sz)
   assert((*a_buf & 0x7F) == s_stream_id);
 
   a_buf++;
-  long ts = sleb128_decode(a_buf, end);
+  long ts = sleb128_decode(a_buf);
 
   if (a_buf >= end)
     return 0;     // Not enough data
@@ -604,14 +604,14 @@ int TradeSample::Read(const char* a_buf, size_t a_sz,
   assert((*a_buf & 0x7F) == s_stream_id);
 
   a_buf++;
-  auto ts = uleb128_decode(a_buf, end);
+  auto ts = uleb128_decode(a_buf);
 
   if (a_buf > end)
     return 0;     // Not enough data
 
   FieldMask mask(*a_buf++);
 
-  PriceT px = sleb128_decode(a_buf, end);
+  PriceT px = sleb128_decode(a_buf);
 
   // If this is a delta trade, the price value is the diff between last known
   // price and current price, so:
@@ -624,7 +624,7 @@ int TradeSample::Read(const char* a_buf, size_t a_sz,
   int qty = 0;
 
   if (mask.has_qty)
-    qty = sleb128_decode(a_buf, end);
+    qty = sleb128_decode(a_buf);
 
   if (utxx::unlikely(a_buf >= end))
     return 0;
@@ -632,13 +632,13 @@ int TradeSample::Read(const char* a_buf, size_t a_sz,
   ulong tid = 0, oid = 0;
 
   if (mask.has_trade_id)
-    tid = uleb128_decode(a_buf, end);
+    tid = uleb128_decode(a_buf);
 
   if (utxx::unlikely(a_buf >= end))
     return 0;
 
   if (mask.has_order_id)
-    oid = uleb128_decode(a_buf, end);
+    oid = uleb128_decode(a_buf);
 
   if (utxx::unlikely(a_buf >= end))
     return 0;

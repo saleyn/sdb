@@ -44,18 +44,12 @@ inline const char* ToString(AggrT a) {
   return s[int(a)];
 }
 
-inline int64_t sleb128_decode(const char*& a_buf, const char* a_end) {
-  int  sz;
-  auto res = utxx::decode_sleb128(a_buf, sz);
-  a_buf   += sz;
-  return res;
+inline int64_t sleb128_decode(const char*& a_buf) {
+  return utxx::decode_sleb128(a_buf);
 }
 
-inline uint64_t uleb128_decode(const char*& a_buf, const char* a_end) {
-  int  sz;
-  auto res = utxx::decode_uleb128(a_buf, sz);
-  a_buf   += sz;
-  return res;
+inline uint64_t uleb128_decode(const char*& a_buf) {
+  return utxx::decode_uleb128(a_buf);
 }
 
 inline int sleb128_encode(int64_t a_value, char*& a_buf) {
@@ -497,8 +491,8 @@ struct PxLevel {
   }
 
   int Decode(const char*& a_buf, const char* a_end) {
-    m_px  = sleb128_decode(a_buf, a_end);
-    m_qty = sleb128_decode(a_buf, a_end);
+    m_px  = sleb128_decode(a_buf);
+    m_qty = sleb128_decode(a_buf);
     return a_buf - a_end;
   };
 };

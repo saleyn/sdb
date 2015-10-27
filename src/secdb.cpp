@@ -42,7 +42,9 @@ void Usage(std::string const& a_text = "")
        << "  -f MDFilename         - filename with KRX market data\n"
        << "  -o|--output OutFile   - output filename (def: stdout)\n"
        << "  -d                    - enable debug printouts\n"
-       << "  -D                    - include YYYYMMDD in timestamp printout\n"
+       << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  -s                    - include symbol name in the output\n"
+       << "  -i                    - include instrument name in the output\n"
        << "  -q                    - quiet mode (don't display a progress bar)\n"
        << "  -Q|--quotes           - print quotes\n"
        << "  -T|--trades           - print trades\n"
@@ -66,14 +68,23 @@ void UnhandledException() {
 
 //------------------------------------------------------------------------------
 struct Printer {
-  Printer(SecDBFileIO& a_file, ostream& a_out, uint a_stream_mask, bool a_fulldate)
+  Printer
+  (
+    SecDBFileIO& a_file, ostream& a_out, uint a_stream_mask,
+    bool a_fulldate, std::string const& a_symbol, std::string const& a_instr
+  )
     : m_file(a_file), m_out(a_out), m_stream_mask(a_stream_mask)
     , m_datefmt(a_fulldate ? utxx::DATE_TIME_WITH_USEC : utxx::TIME_WITH_USEC)
+    , m_symbol(a_symbol)
+    , m_instr (a_instr)
   {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0)
-      m_out << "#Time|M|Bids|Asks" << endl;
+      m_out << "#Time|M|" << (m_symbol.empty() ? "Symbol|" : "")
+            << (m_instr.empty() ? "Insrument|" : "") << "Bids|Asks" << endl;
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0)
-      m_out << "#Time|T|Side|Price|Qty|TradeID|OrderID" << endl;
+      m_out << "#Time|T|"  << (m_symbol.empty() ? "Symbol|" : "")
+            << (m_instr.empty() ? "Insrument|" : "")
+            << "Side|Price|Qty|TradeID|OrderID" << endl;
   }
 
   bool operator()(SecondsSample const& a_sec) {
@@ -84,15 +95,17 @@ struct Printer {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
       m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
             << "|M|";
+      if (!m_symbol.empty()) m_out << m_symbol << '|';
+      if (!m_instr.empty())  m_out << m_instr  << '|';
       int i = 0;
       for (auto p = a.BestBid(), e = a.EndBid(); p != e; a.NextBid(p), ++i)
-        m_out << (i ? "," : "")
+        m_out << (i ? " " : "")
               << std::setprecision(m_file.PxPrecision()) << std::fixed
               << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
       m_out << '|';
       i = 0;
       for (auto p = a.BestAsk(), e = a.EndAsk(); p != e; a.NextAsk(p), ++i)
-        m_out << (i ? "," : "")
+        m_out << (i ? " " : "")
               << std::setprecision(m_file.PxPrecision()) << std::fixed
               << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
       m_out << endl;
@@ -103,7 +116,10 @@ struct Printer {
   bool operator()(TradeSample const& a_trade) {
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0) {
       m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
-            << "|T|" << ToChar(a_trade.Side()) << '|'
+            << "|T|";
+      if (!m_symbol.empty()) m_out << m_symbol << '|';
+      if (!m_instr.empty())  m_out << m_instr  << '|';
+      m_out << ToChar(a_trade.Side()) << '|'
             << std::setprecision(m_file.PxPrecision()) << std::fixed
             << (m_file.PxStep() * a_trade.Price())
             << '|' << a_trade.Qty() << '|' << ToChar(a_trade.Aggr()) << '|';
@@ -126,6 +142,8 @@ private:
   ostream&          m_out;
   uint              m_stream_mask;
   utxx::stamp_type  m_datefmt;
+  std::string       m_symbol;
+  std::string       m_instr;
 };
 
 //------------------------------------------------------------------------------
@@ -140,6 +158,8 @@ int main(int argc, char* argv[])
   std::string filename;
   bool        fulldate    = false;
   bool        quiet       = false;
+  bool        with_symbol = false;
+  bool        with_instr  = false;
   int         debug       = 0;
   std::string outfile;
   std::string sresol;
@@ -151,11 +171,13 @@ int main(int argc, char* argv[])
   //----------------------------------------------------------------------------
   utxx::opts_parser opts(argc, argv);
   while  (opts.next()) {
-      if (opts.match("-f", "",         &filename))  continue;
-      if (opts.match("-d", "--debug"))  { debug++;  continue; }
+      if (opts.match("-f", "",            &filename)) continue;
+      if (opts.match("-d", "--debug"))  { debug++;    continue; }
       if (opts.match("-D", "--full-date", &fulldate)) continue;
-      if (opts.match("-q", "--quiet",     &quiet))  continue;
-      if (opts.match("-o", "--output",  &outfile))  continue;
+      if (opts.match("-q", "--quiet",        &quiet)) continue;
+      if (opts.match("-o", "--output",     &outfile)) continue;
+      if (opts.match("-s", "--symbol", &with_symbol)) continue;
+      if (opts.match("-i", "--instr",   &with_instr)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
         continue;
@@ -164,7 +186,7 @@ int main(int argc, char* argv[])
         stream_mask |= 1u << int(StreamType::Trade);
         continue;
       }
-      if (opts.match("-C", "--candles", &sresol))   continue;
+      if (opts.match("-C", "--candles", &sresol))     continue;
 
       if (opts.is_help()) Usage();
 
@@ -228,7 +250,12 @@ int main(int argc, char* argv[])
   if (resol)
     output.PrintCandles(out, resol);
   else {
-    Printer printer(output, out, stream_mask, fulldate);
+    Printer printer
+    (
+      output, out, stream_mask, fulldate,
+      with_symbol ? output.Info().Symbol() : "",
+      with_instr  ? output.Info().Instrument() : ""
+    );
     output.Read(printer);
   }
 
