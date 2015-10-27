@@ -230,24 +230,28 @@ int main(int argc, char* argv[])
       output.Flush();
     }
 
-    float bid =        stof(value(MD::Bid));
-    float ask =        stof(value(MD::Ask));
+    float bid =       stof(value(MD::Bid));
+    float ask =       stof(value(MD::Ask));
 
-    auto book = PxLevels<6, float>
+    auto bids = PxLevels<3, float>
     {{
-        {bid - 0.10f,  stoi(value(MD::L3BVo))}
-      , {bid - 0.05f,  stoi(value(MD::L2BVo))}
-      , {bid        ,  stoi(value(MD::L1BVo))}
-      , {ask        , -stoi(value(MD::L1AVo))}
-      , {ask + 0.05f, -stoi(value(MD::L2AVo))}
-      , {ask + 0.10f, -stoi(value(MD::L3AVo))}
+        {bid        , stoi(value(MD::L1BVo))}
+      , {bid - 0.05f, stoi(value(MD::L2BVo))}
+      , {bid - 0.10f, stoi(value(MD::L3BVo))}
+    }};
+    auto asks = PxLevels<3, float>
+    {{
+        {ask        , stoi(value(MD::L1AVo))}
+      , {ask + 0.05f, stoi(value(MD::L2AVo))}
+      , {ask + 0.10f, stoi(value(MD::L3AVo))}
     }};
 
     float last_px  = stof(value(MD::LstPx));
     int   last_qty = stoi(value(MD::LstQty));
 
     // Write the quote info
-    output.WriteQuotes<PriceUnit::DoubleVal>(now, std::move(book), 6);
+    output.WriteQuotes<PriceUnit::DoubleVal>
+      (now, std::move(bids), 3, std::move(asks), 3);
 
     if (last_qty != 0) {
       // Write trade details
@@ -257,7 +261,7 @@ int main(int argc, char* argv[])
                  ? AggrT::Aggressor : AggrT::Passive;
 
       output.WriteTrade<PriceUnit::DoubleVal>
-        (now, side, last_px, last_qty, aggr, 0, 0);
+        (now, side, last_px, abs(last_qty), aggr, 0, 0);
     }
 
     if (show_progress) {

@@ -21,6 +21,7 @@
 #include <utxx/leb128.hpp>
 #include <utxx/endian.hpp>
 #include <utxx/scope_exit.hpp>
+#include <utxx/buffer.hpp>
 #include <boost/filesystem.hpp>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -148,7 +149,7 @@ Open(std::string const& a_name, int a_debug)
   m_candles_meta.Read(m_file);
 
   if (a_debug)
-    PrintCandles();
+    PrintCandles(std::cerr);
 }
 
 //------------------------------------------------------------------------------
@@ -204,7 +205,7 @@ Close()
     m_candles_meta.CommitCandles(m_file);
 
   if (m_debug > 1)
-    PrintCandles();
+    PrintCandles(std::cerr);
 
   ::fclose(m_file);
   m_file = nullptr;
@@ -378,12 +379,44 @@ NormalizePx(T a_px)
 template <uint MaxDepth>
 template <PriceUnit PU, typename PxT>
 void BaseSecDBFileIO<MaxDepth>::
-WriteQuotes(time_val a_ts, PxLevels<MaxDepth*2, PxT>&& a_book, size_t a_count)
+WriteQuotes
+(
+  time_val a_ts,
+  PxLevels<MaxDepth, PxT>&& a_bids, size_t a_bid_cnt,
+  PxLevels<MaxDepth, PxT>&& a_asks, size_t a_ask_cnt
+)
 {
-  if (utxx::unlikely(a_count == 0))
-    return;
+  if (utxx::unlikely(a_bid_cnt > MaxDepth || a_ask_cnt > MaxDepth))
+    UTXX_THROW_RUNTIME_ERROR("Invalid bid/ask counts: ",a_bid_cnt,' ',a_ask_cnt);
 
-  assert(a_count <= MaxDepth*2);
+  // Start with the first
+  PxT  first_px;
+  int  qty;
+  PxLevel<PxT>* pb, *pb_end;
+  PxLevel<PxT>* pa, *pa_end;
+
+  if (utxx::likely(a_bid_cnt > 0)) {
+    auto&  b = a_bids[a_bid_cnt-1];
+    first_px = NormalizePx<PU>(b.m_px);
+    qty      = b.m_qty;
+    pb       = &b;
+    // pb pointer points to the next item after the first bid:
+    pb_end   = pb-- - a_bid_cnt;
+    pa       = &a_asks[0];
+    pa_end   = pa + a_ask_cnt;
+  } else if (utxx::likely(a_ask_cnt > 0)) {
+    auto&  a = a_asks[a_ask_cnt-1];
+    first_px = NormalizePx<PU>(a.m_px);
+    qty      = a.m_qty;
+    // Since there are no bids, set pb to point to the end of the bids range,
+    // and the first price is based on a_asks[0], so pa pointer should be set
+    // to next item after the first ask:
+    pb       = &a_bids[0];
+    pb_end   = --pb;
+    pa       = &a;
+    pa_end   = pa++ + a_ask_cnt;
+  } else
+    return;
 
   if (utxx::unlikely(a_ts < m_last_ts))
     UTXX_THROW_RUNTIME_ERROR
@@ -395,9 +428,6 @@ WriteQuotes(time_val a_ts, PxLevels<MaxDepth*2, PxT>&& a_book, size_t a_count)
   int  prev_usec  = m_last_usec;
   bool sec_chng   = WriteSeconds(a_ts);
 
-  // Start with the first
-  auto first_px   = NormalizePx<PU>(a_book[0].m_px);
-  auto prev_px    = sec_chng ? first_px    : (first_px - m_last_quote_px);
   auto ts         = sec_chng ? m_last_usec : (m_last_usec - prev_usec);
   m_last_quote_px = first_px;
 
@@ -408,20 +438,30 @@ WriteQuotes(time_val a_ts, PxLevels<MaxDepth*2, PxT>&& a_book, size_t a_count)
 
   auto book = typename QuoteSampleT::PxLevelsT();
   auto q    = &book[0];
-  q->m_px   = prev_px;
-  q->m_qty  = a_book[0].m_qty;
-  q++;
+  q->m_px   = sec_chng ? first_px : first_px - m_last_quote_px;
+  q->m_qty  = qty;
 
-  // Remaining PxLevels
-  for (auto p = &a_book[1], e = p + a_count; p != e; ++p, ++q) {
+  auto prev_px = first_px;
+
+  // Remaining Bids (a_bids are in descending order, so we go in reverse dir)
+  for (++q; pb != pb_end; --pb, ++q) {
     // Calculate differential price, and update it in the PxLevels container
-    auto px  = NormalizePx<PU>(p->m_px);
+    auto px  = NormalizePx<PU>(pb->m_px);
     q->m_px  = px - prev_px;
-    q->m_qty = p->m_qty;
+    q->m_qty = pb->m_qty;
     prev_px  = px;
   }
 
-  QuoteSampleT qt(delta, ts, std::move(book), a_count);
+  // Asks (a_asks are sorted in ascending order, so we go in forward direction)
+  for (; pa != pa_end; ++pa, ++q) {
+    // Calculate differential price, and update it in the PxLevels container
+    auto px  = NormalizePx<PU>(pa->m_px);
+    q->m_px  = px - prev_px;
+    q->m_qty = pa->m_qty; // Asks are negative
+    prev_px  = px;
+  }
+
+  QuoteSampleT qt(delta, ts, std::move(book), a_bid_cnt, a_ask_cnt);
 
   if (qt.Write(m_file) < 0)
     UTXX_THROW_IO_ERROR
@@ -475,21 +515,29 @@ WriteTrade
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 void BaseSecDBFileIO<MaxDepth>::
-PrintCandles() const
+PrintCandles(std::ostream& out, int a_resolution) const
 {
-  std::cerr << "  Candle Resolutions: " << m_candles_meta.Headers().size()
-            << std::endl;
-  uint idx = 0;
+  if (m_debug)
+    out << "  Candle Resolutions: " << m_candles_meta.Headers().size()
+        << std::endl;
+
+  bool found = a_resolution == -1;
+  uint idx   = 0;
   for (auto& ch : m_candles_meta.Headers()) {
+    // If requested specific candle resolution - skip the rest
+    if (a_resolution != -1 && a_resolution != ch.Resolution())
+      continue;
+
     auto n = ch.Candles().size();
     int  s = ch.StartTime() + TZOffset();
     int  e = s + ch.Resolution()*n;
-    fprintf(stderr, "  Resolution: %ds %02d:%02d - %02d:%02d %s (UTC: %ld)\n",
+    char buf[80];
+    sprintf(buf, "# Resolution: %ds %02d:%02d - %02d:%02d %s (UTC: %ld)\n",
             ch.Resolution(),
             s / 3600, s % 3600 / 60,
             e / 3600, e % 3600 / 60,
             TZ().c_str(), Date() + ch.StartTime());
-    std::cerr <<
+    out << buf <<
       "#Time    Open   High   Low    Close     BuyVol   SellVol DataOffset\n";
 
     for (auto& c : ch.Candles()) {
@@ -497,19 +545,124 @@ PrintCandles() const
       uint h  = ts / 3600, m = ts % 3600 / 60, s = ts % 60;
       //if (c.DataOffset() == 0)
       //  continue;
-      char buf[16];
       sprintf(buf, "%02d:%02d:%02d ", h,m,s);
-      std::cerr << buf
-                << std::setprecision(Header().PxPrecision())     << std::fixed
-                << NormalPxToDouble(c.Open())    << ' '
-                << NormalPxToDouble(c.High())    << ' '
-                << NormalPxToDouble(c.Low())     << ' '
-                << NormalPxToDouble(c.Close())   << ' '
-                << std::setw(9)   << c.BVolume() << ' '
-                << std::setw(9)   << c.SVolume() << " ["
-                << c.DataOffset() << "]\n";
+      out << buf
+          << std::setprecision(Header().PxPrecision())     << std::fixed
+          << NormalPxToDouble(c.Open())    << ' '
+          << NormalPxToDouble(c.High())    << ' '
+          << NormalPxToDouble(c.Low())     << ' '
+          << NormalPxToDouble(c.Close())   << ' '
+          << std::setw(9)   << c.BVolume() << ' '
+          << std::setw(9)   << c.SVolume();
+      if (m_debug)
+        out << " [" << c.DataOffset() << "]\n";
+      else
+        out << std::endl;
     }
+
+    found = true;
+  }
+
+  if (!found)
+    UTXX_THROW_RUNTIME_ERROR
+      ("Requested candle resolution ", a_resolution, "not found in ", m_filename);
+}
+
+//------------------------------------------------------------------------------
+template <uint MaxDepth>
+template <typename OnSample>
+void BaseSecDBFileIO<MaxDepth>::
+Read(OnSample a_fun)
+{
+  if (fseek(m_file, m_streams_meta.DataOffset(), SEEK_SET) < 0)
+    UTXX_THROW_IO_ERROR
+      (errno, "Can't find file data offset ", m_streams_meta.DataOffset(), ": ",
+       m_filename);
+
+  // Read the beginning of data marker
+  {
+    char buf[4];
+    if (fread(buf, 1, sizeof(buf), m_file) != sizeof(buf))
+      UTXX_THROW_IO_ERROR
+        (errno, "Can't read beginning of data marker ", m_filename);
+
+    if (uint(utxx::cast32le(buf)) != BEGIN_STREAM_DATA())
+      UTXX_THROW_RUNTIME_ERROR
+        ("Invalid beginning of data marker: ", m_filename);
+  }
+
+  utxx::dynamic_io_buffer buf(4096);
+
+  m_last_quote_px = 0;
+  m_last_trade_px = 0;
+
+  while (true) {
+    long n = fread(buf.wr_ptr(), 1, buf.capacity(), m_file);
+
+    if  (n == 0)
+      break;
+
+    buf.commit(n);
+
+    while (n > 0) {
+      if (buf.size() < 2)
+        break;
+      auto x         = *(uint8_t*)buf.rd_ptr();
+      auto base      = (StreamBase*)&x;
+      bool is_delta  = base->Delta();
+      auto stream_tp = base->Type();
+
+      switch (stream_tp) {
+        case StreamType::Seconds: {
+          SecondsSample ss;
+          n = ss.Read(buf.rd_ptr(), buf.size());
+          if (n > 0) {
+            time_t secs   = m_header.Midnight() + ss.Time();
+            m_last_ts.set(secs);
+            m_last_sec    = secs;
+            m_last_usec   = 0;
+            m_next_second = m_last_sec + 1;
+          }
+          break;
+        }
+        case StreamType::Quotes: {
+          QuoteSample<MaxDepth, PriceT> qs;
+          n = qs.Read(buf.rd_ptr(), buf.size(), is_delta, m_last_quote_px);
+          if (n <= 0)
+            break;
+          m_last_usec += qs.Time();
+          m_last_ts.usec(m_last_usec);
+          a_fun(qs);
+          break;
+        }
+        case StreamType::Trade: {
+          TradeSample ts;
+          n = ts.Read(buf.rd_ptr(), buf.size(), is_delta, m_last_trade_px);
+          if (n <= 0)
+            break;
+          m_last_usec += ts.Time();
+          m_last_ts.usec(m_last_usec);
+          a_fun(ts);
+          break;
+        }
+        case StreamType::Order:
+        case StreamType::Summary:
+        case StreamType::Message:
+          UTXX_THROW_RUNTIME_ERROR("Not supported: ", int(stream_tp), " stream");
+        default:
+          UTXX_THROW_RUNTIME_ERROR("Invalid stream type: ", int(stream_tp));
+      }
+
+      if (n == 0) break;
+      if (n <  0)
+        UTXX_THROW_IO_ERROR(errno, "Error reading from file ", m_filename);
+
+      buf.read(n);
+    }
+
+    buf.crunch();
   }
 }
 
+//------------------------------------------------------------------------------
 } // namespace secdb

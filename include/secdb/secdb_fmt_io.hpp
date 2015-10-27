@@ -42,17 +42,28 @@ struct BaseSecDBFileIO {
 
   ~BaseSecDBFileIO() { Close(); }
 
-  Header      const&  Info()      const { return m_header;            }
-  time_t              Date()      const { return m_header.Date();     }
-  time_t              Midnight()  const { return m_header.Midnight(); }
-  std::string const&  Filename()  const { return m_filename;          }
+  static constexpr uint MAX_DEPTH()       { return MaxDepth;              }
 
-  std::string         TZ()        const { return m_header.TZ();       }
-  std::string const&  TZName()    const { return m_header.TZName();   }
-  int                 TZOffset()  const { return m_header.TZOffset(); }
+  Header      const&  Info()        const { return m_header;              }
+  time_t              Date()        const { return m_header.Date();       }
+  time_t              Midnight()    const { return m_header.Midnight();   }
+  std::string const&  Filename()    const { return m_filename;            }
 
-  int                 Debug()     const { return m_debug;             }
-  void                Debug(int a)      { m_debug = a;                }
+  std::string         TZ()          const { return m_header.TZ();         }
+  std::string const&  TZName()      const { return m_header.TZName();     }
+  int                 TZOffset()    const { return m_header.TZOffset();   }
+
+  int                 Debug()       const { return m_debug;               }
+  void                Debug(int a)        { m_debug = a;                  }
+
+  time_val    const&  Time()        const { return m_last_ts;             }
+
+  /// Minimal price step (e.g. 0.0001)
+  double              PxStep()      const { return m_header.PxStep();     }
+  /// Price scale (e.g. 10000)
+  int                 PxScale()     const { return m_header.PxScale();    }
+  /// Price precision in digits after the decimal point (e.g. 4)
+  int                 PxPrecision() const { return m_header.PxPrecision();}
 
   /// Get filename based on given arguments
   static std::string Filename
@@ -121,10 +132,20 @@ struct BaseSecDBFileIO {
   /// Read file header
   int ReadHeader();
 
-  /// Write a snapshot of a market data book
+  /// Write a snapshot of a market data book.
+  /// @param a_ts timestamp of this quote
+  /// @param a_bids array of bids sorted in descending order
+  /// @param a_bid_cnt total number of items in the \a a_bids array
+  /// @param a_asks array of asks sorted in ascending order
+  /// @param a_bid_cnt total number of items in the \a a_asks array
   /// @return number of bytes written
   template <PriceUnit PU, typename PxT>
-  void WriteQuotes(time_val a_ts, PxLevels<MaxDepth*2, PxT>&& a_book, size_t a_count);
+  void WriteQuotes
+  (
+    time_val a_ts,
+    PxLevels<MaxDepth, PxT>&& a_bids, size_t a_bid_cnt,
+    PxLevels<MaxDepth, PxT>&& a_asks, size_t a_ask_cnt
+  );
 
   /// Write a trade data
   /// @return number of bytes written
@@ -160,6 +181,17 @@ struct BaseSecDBFileIO {
   /// Flush the unwritten data to file stream
   void Flush()                  { if (m_file) ::fflush(m_file); }
   void Finalize();
+
+  /// Print candles to an output stream
+  /// @param out output stream
+  /// @param a_resolution output only cangles matching this resolution
+  void   PrintCandles(std::ostream& out, int a_resolution = -1) const;
+
+  /// Read all samples from file and invoke \a a_fun callback for each record.
+  /// @param a_fun functor (auto& record) -> bool.
+  template <typename Visitor>
+  void Read(Visitor a_fun);
+
 private:
   FILE*       m_file          = nullptr;
   OpenMode    m_mode          = OpenMode::Read;
@@ -181,6 +213,9 @@ private:
 
   WriteStateT m_written_state = WriteStateT::Init;
 
+  /// Normalize price given in price steps to price units \a PU
+  template <PriceUnit PU, typename T>
+  int  NormalizePx(T a_px);
 
   template <OpenMode Mode>
   size_t DoOpen(std::string const& a_filename, int a_perm = 0640);
@@ -188,12 +223,7 @@ private:
   /// @return pair{IsNewSecondSinceMidnight, NowSecSinceMidnight}
   bool   WriteSeconds(time_val a_now);
 
-  template <PriceUnit PU, typename T>
-  int    NormalizePx(T a_px);
-
   double NormalPxToDouble(int a_px) const { return a_px * m_header.PxStep(); }
-
-  void   PrintCandles() const;
 };
 
 } // namespace secdb

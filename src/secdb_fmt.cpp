@@ -209,12 +209,34 @@ void Header::Set
 //==============================================================================
 int SecondsSample::Write(FILE* a_file)
 {
-  char  buf[4];
+  char  buf[16];
   char* p = buf;
   StreamBase::Write(p);
-  utxx::encode_sleb128(m_time, p);
+  sleb128_encode(m_time, p);
+  size_t sz = p - buf;
+  return fwrite(buf, 1, sz, a_file) == sz ? sz : -1;
+}
 
-  return fwrite(buf, 1, sizeof(buf), a_file) == sizeof(buf) ? sizeof(buf):-1;
+//------------------------------------------------------------------------------
+int SecondsSample::Read(const char* a_buf, size_t a_sz)
+{
+  static constexpr uint8_t s_stream_id = uint8_t(StreamType::Seconds);
+
+  auto begin = a_buf;
+  auto end   = a_buf + a_sz;
+
+  // Must be this stream
+  assert((*a_buf & 0x7F) == s_stream_id);
+
+  a_buf++;
+  long ts = sleb128_decode(a_buf, end);
+
+  if (a_buf >= end)
+    return 0;     // Not enough data
+
+  new (this) SecondsSample(ts);
+
+  return a_buf - begin;
 }
 
 //==============================================================================
@@ -537,26 +559,95 @@ void secdb::CandlesMeta::Read(FILE* a_file)
 //==============================================================================
 // TradeSample
 //==============================================================================
+void TradeSample::
+Set(FieldMask a_mask, PriceT a_px, int a_qty, size_t a_tid, size_t a_oid)
+{
+  m_mask      = a_mask;
+  m_px        = a_px;
+  m_qty       = a_qty;
+  m_trade_id  = a_tid;
+  m_order_id  = a_oid;
+}
 
+//------------------------------------------------------------------------------
 int TradeSample::Write(FILE* a_file)
 {
   char  buf[128];
   char* p = buf;
   // Encode stream header and time
   StreamBase::Write(p);
-  p += utxx::encode_uleb128<0>(m_time, p);  // Encode time since last second
-  *p++ = *(uint8_t*)&m_mask;                // Encode FieldMask
-  p += utxx::encode_sleb128(m_px, p);       // Encode Price - it's always present
+  uleb128_encode(m_time, p);          // Encode time since last second
+  *p++ = *(uint8_t*)&m_mask;          // Encode FieldMask
+  sleb128_encode(m_px, p);            // Encode Price - it's always present
   if (HasQty())
-    p += utxx::encode_sleb128(m_qty, p);
+    sleb128_encode(m_qty, p);
   if (HasTradeID())
-    p += utxx::encode_uleb128<0>(m_trade_id, p);
+    uleb128_encode(m_trade_id, p);
   if (HasOrderID())
-    p += utxx::encode_uleb128<0>(m_order_id, p);
+    uleb128_encode(m_order_id, p);
 
-  size_t sz = p - buf;
+  size_t sz  = p - buf;
   assert(sz <= sizeof(buf));
   return fwrite(buf, 1, sz, a_file) == sz ? sz : -1;
+}
+
+//------------------------------------------------------------------------------
+int TradeSample::Read(const char* a_buf, size_t a_sz,
+                      bool a_is_delta, PriceT& a_last_px)
+{
+  static constexpr uint8_t s_stream_id = uint8_t(StreamType::Trade);
+
+  auto begin = a_buf;
+  auto end   = a_buf + a_sz;
+
+  // Must be this stream
+  assert((*a_buf & 0x7F) == s_stream_id);
+
+  a_buf++;
+  auto ts = uleb128_decode(a_buf, end);
+
+  if (a_buf > end)
+    return 0;     // Not enough data
+
+  FieldMask mask(*a_buf++);
+
+  PriceT px = sleb128_decode(a_buf, end);
+
+  // If this is a delta trade, the price value is the diff between last known
+  // price and current price, so:
+  if (a_is_delta)
+    px += a_last_px;
+
+  if (utxx::unlikely(a_buf >= end))
+    return 0;
+
+  int qty = 0;
+
+  if (mask.has_qty)
+    qty = sleb128_decode(a_buf, end);
+
+  if (utxx::unlikely(a_buf >= end))
+    return 0;
+
+  ulong tid = 0, oid = 0;
+
+  if (mask.has_trade_id)
+    tid = uleb128_decode(a_buf, end);
+
+  if (utxx::unlikely(a_buf >= end))
+    return 0;
+
+  if (mask.has_order_id)
+    oid = uleb128_decode(a_buf, end);
+
+  if (utxx::unlikely(a_buf >= end))
+    return 0;
+
+  new (this) TradeSample(true, mask, ts, px, qty, tid, oid);
+
+  a_last_px = px;
+
+  return a_buf - begin;
 }
 
 //------------------------------------------------------------------------------

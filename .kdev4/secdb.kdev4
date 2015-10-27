@@ -70,11 +70,11 @@ Name=secdb-bin
 Type=Native Application
 
 [Launch][Launch Configuration 2][Data]
-Arguments=-f /tmp/20150626.KRX.KR4101.KR4101K90008.sdb -d
+Arguments=-f /tmp/20150626.KRX.KR4101.KR4101K90008.sdb -Q -T -q -D -o /dev/stderr
 Dependencies=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x01\x00\x00\x00\x0b\x00\x00\x00\x00\x03\x00\x00\x00\n\x00s\x00e\x00c\x00d\x00b\x00\x00\x00\x06\x00s\x00r\x00c\x00\x00\x00\x12\x00s\x00e\x00c\x00d\x00b\x00-\x00b\x00i\x00n)
 Dependency Action=Build
 EnvironmentGroup=
-Executable=
+Executable=file:///home/serge/projects/secdb2/
 External Terminal=konsole --noclose --workdir %workdir -e %exe
 Project Target=secdb,src,secdb-bin
 Use External Terminal=false

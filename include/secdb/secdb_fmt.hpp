@@ -28,15 +28,46 @@ using uuid = boost::uuids::uuid;
 
 enum class SideT : char { Buy, Sell };
 
-inline const char ToChar(SideT a) {
+inline char ToChar(SideT a) {
   static const char s[] = {'B','S'}; return s[int(a)];
 }
 
 enum class AggrT : char { Undefined, Aggressor, Passive };
 
+inline char ToChar(AggrT a) {
+  static const char s[] = {' ', 'A', 'P'};
+  return s[int(a)];
+}
+
 inline const char* ToString(AggrT a) {
   static const char* s[] = {"Undef", "Aggr", "Pass"};
   return s[int(a)];
+}
+
+inline int64_t sleb128_decode(const char*& a_buf, const char* a_end) {
+  int  sz;
+  auto res = utxx::decode_sleb128(a_buf, sz);
+  a_buf   += sz;
+  return res;
+}
+
+inline uint64_t uleb128_decode(const char*& a_buf, const char* a_end) {
+  int  sz;
+  auto res = utxx::decode_uleb128(a_buf, sz);
+  a_buf   += sz;
+  return res;
+}
+
+inline int sleb128_encode(int64_t a_value, char*& a_buf) {
+  int sz = utxx::encode_sleb128(a_value, a_buf);
+  a_buf += sz;
+  return sz;
+}
+
+inline int uleb128_encode(uint64_t a_value, char*& a_buf) {
+  int sz = utxx::encode_uleb128<0>(a_value, a_buf);
+  a_buf += sz;
+  return sz;
 }
 
 /// File opening mode
@@ -415,18 +446,18 @@ private:
 struct StreamBase {
   StreamBase() {}
   StreamBase(bool a_dlt, StreamType a_tp)
-    : m_delta(a_dlt), m_type(char(a_tp))
+    : m_type(char(a_tp)), m_delta(a_dlt)
   {
     static_assert(sizeof(StreamBase) == sizeof(uint8_t), "Invalid size");
   }
 
-  bool       Delta() const { return m_delta;            }
-  StreamType Type()  const { return StreamType(m_type); }
+  bool       Delta()    const { return m_delta;            }
+  StreamType Type()     const { return StreamType(m_type); }
 
-  void       Write(char*& a) { *a++ = *(uint8_t*)this;  }
+  void       Write(char*& a)  { *a++ = *(uint8_t*)this;    }
 private:
-  bool       m_delta: 1;
   char       m_type : 7;
+  bool       m_delta: 1;
 };
 
 //------------------------------------------------------------------------------
@@ -441,9 +472,12 @@ struct SecondsSample : public StreamBase {
     assert(a_now < ((1 << 24) - 1));
   }
 
-  int Time() const { return m_time; }
+  int  Time()             const { return m_time;      }
+  void Time(int a_midsecs)      { m_time = a_midsecs; }
 
-  int Write(FILE* a_file);
+  int  Write(FILE* a_file);
+
+  int  Read(const char* a_buf, size_t a_sz);
 private:
   uint m_time : 24;
 };
@@ -455,6 +489,18 @@ template <typename PxT>
 struct PxLevel {
   PxT m_px;
   int m_qty;
+
+  int Encode(char*& a_buf, const char* a_end) const {
+    int sz  = sleb128_encode(m_px,  a_buf);
+        sz += sleb128_encode(m_qty, a_buf);
+    return sz;
+  }
+
+  int Decode(const char*& a_buf, const char* a_end) {
+    m_px  = sleb128_decode(a_buf, a_end);
+    m_qty = sleb128_decode(a_buf, a_end);
+    return a_buf - a_end;
+  };
 };
 
 template <uint MaxDepth, typename PxT>
@@ -466,27 +512,47 @@ using PxLevels = std::array<PxLevel<PxT>, MaxDepth>;
 //------------------------------------------------------------------------------
 template <uint MaxDepth, typename PxT>
 struct QuoteSample : public StreamBase {
-  using PxLevelsT = PxLevels<MaxDepth, PxT>;
+  using PxLevelT  = PxLevel<PxT>;
+  using PxLevelsT = PxLevels<MaxDepth*2, PxT>;
 
-  QuoteSample() {}
-  QuoteSample(bool a_delta, uint a_ts, PxLevelsT&& a_lev, size_t a_count)
+  QuoteSample() : m_levels(PxLevelsT()) {}
+  QuoteSample
+  (
+    bool        a_delta, uint   a_ts,
+    PxLevelsT&& a_lev,   size_t a_bid_cnt = 0, size_t a_ask_cnt = 0
+  )
     : StreamBase(a_delta, StreamType::Quotes)
     , m_time    (a_ts)
     , m_levels  (std::move(a_lev))
-    , m_count   (a_count)
-  {}
+    , m_bid_cnt (a_bid_cnt)
+    , m_ask_cnt (a_ask_cnt)
+  {
+    assert(m_bid_cnt + m_ask_cnt <= int(MaxDepth));
+  }
 
-  int    Time()  const { return m_time;  }
-  size_t Count() const { return m_count; }
+  int              Time()       const { return m_time;    }
+  int              BidCount()   const { return m_bid_cnt; }
+  int              AskCount()   const { return m_ask_cnt; }
 
-  PxLevelsT const& Levels() const { return m_levels; }
+  PxLevelsT const& Levels()     const { return m_levels; }
 
-  int    Write(FILE* a_file);
+  PxLevelT  const* BestBid()    const { return &m_levels[m_bid_cnt-1]; }
+  PxLevelT  const* BestAsk()    const { return &m_levels[m_bid_cnt];   }
 
+  PxLevelT  const* EndBid()     const { return &m_levels[0] - 1;       }
+  PxLevelT  const* EndAsk()     const { return &m_levels[m_bid_cnt+m_ask_cnt]; }
+
+  static void  NextBid(PxLevelT const*& p) { --p; }
+  static void  NextAsk(PxLevelT const*& p) { ++p; }
+
+  int   Write(FILE* a_file);
+
+  int   Read(const char* a_buf, size_t a_sz, bool a_is_delta, PxT& a_last_px);
 private:
-  uint        m_time;
-  PxLevelsT&& m_levels;
-  size_t      m_count;
+  uint      m_time;
+  PxLevelsT m_levels;
+  int       m_bid_cnt;
+  int       m_ask_cnt;
 };
 
 //------------------------------------------------------------------------------
@@ -495,32 +561,48 @@ private:
 //------------------------------------------------------------------------------
 struct TradeSample : public StreamBase {
   struct FieldMask {
-    bool internal     : 1;
-    char aggr         : 2;
-    char side         : 1;
-    bool has_qty      : 1;
-    bool has_trade_id : 1;
-    bool has_order_id : 1;
     bool _unused      : 1;
+    bool has_order_id : 1;
+    bool has_trade_id : 1;
+    bool has_qty      : 1;
+    bool side         : 1;
+    char aggr         : 2;
+    bool internal     : 1;
 
-    FieldMask() { *(uint8_t*)this = 0; }
+    FieldMask()           { *(uint8_t*)this = 0; }
+    FieldMask(uint8_t a)  { *(uint8_t*)this = a; }
+    FieldMask(FieldMask const&) = default;
     FieldMask(bool a_internal, AggrT a_aggr,    SideT a_sd,
               bool a_has_qty,  bool  a_has_oid, bool  a_has_trid)
-      : internal    (a_internal)
-      , aggr        ((int)a_aggr)
-      , side        (bool(a_sd == SideT::Sell))
-      , has_qty     (a_has_qty)
-      , has_trade_id(a_has_trid)
+      :_unused      (false)
       , has_order_id(a_has_oid)
+      , has_trade_id(a_has_trid)
+      , has_qty     (a_has_qty)
+      , side        (a_sd == SideT::Sell)
+      , aggr        ((int)a_aggr)
+      , internal    (a_internal)
     {
       static_assert(sizeof(FieldMask) == sizeof(uint8_t), "Invalid size");
     }
   };
 
   TradeSample() {}
+  TradeSample(bool a_delta, FieldMask a_mask, uint a_ts, PriceT a_px, int a_qty,
+              size_t a_ord_id = 0, size_t a_trade_id = 0)
+    : StreamBase(a_delta, StreamType::Trade)
+    , m_mask    (a_mask)
+    , m_time    (a_ts)
+    , m_trade_id(a_trade_id)
+    , m_order_id(a_ord_id)
+    , m_px      (a_px)
+    , m_qty     (a_qty)
+  {
+    assert(a_ts < ((1 << 24) - 1));
+  }
+
   TradeSample(bool   a_delta, uint a_ts, SideT  a_sd, PriceT a_px, int a_qty,
               AggrT  a_aggr = AggrT::Undefined,
-              size_t a_ord_id   = 0,    size_t a_trade_id = 0,
+              size_t a_ord_id   = 0,     size_t a_trade_id = 0,
               bool   a_internal = false)
     : StreamBase(a_delta, StreamType::Trade)
     , m_mask    (a_internal, a_aggr, a_sd, a_qty != 0, a_ord_id != 0,
@@ -548,12 +630,16 @@ struct TradeSample : public StreamBase {
   PriceT    Price()       const { return m_px;                }
   int       Qty()         const { return m_qty;               }
 
-  void      TradeID(size_t a) { m_trade_id = a; m_mask.has_trade_id = true; }
-  void      OrderID(size_t a) { m_order_id = a; m_mask.has_order_id = true; }
-  void      Price  (PriceT a) { m_px       = a; }
-  void      Qty    (int    a) { m_qty      = a; m_mask.has_qty      = true; }
+  void      TradeID(size_t a)   { m_trade_id = a; m_mask.has_trade_id = true; }
+  void      OrderID(size_t a)   { m_order_id = a; m_mask.has_order_id = true; }
+  void      Price  (PriceT a)   { m_px       = a; }
+  void      Qty    (int    a)   { m_qty      = a; m_mask.has_qty      = true; }
+
+  void      Set(FieldMask a, PriceT a_px, int a_qty, size_t a_tid, size_t a_oid);
 
   int       Write(FILE* a_file);
+  int       Read (const char* a_buf, size_t  a_sz,
+                  bool   a_is_delta, PriceT& a_last_px);
 
   std::string ToString(double a_px_step=1) const;
 

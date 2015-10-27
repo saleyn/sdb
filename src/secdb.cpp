@@ -22,6 +22,12 @@
 using namespace std;
 using namespace secdb;
 
+using SecDBFileIO = BaseSecDBFileIO<10>;
+
+//------------------------------------------------------------------------------
+// Forward declarations
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 void Usage(std::string const& a_text = "")
 {
@@ -31,12 +37,20 @@ void Usage(std::string const& a_text = "")
   cout << "SecDB file format reader\n"
        << "Copyright (c) 2015 Omnibius, LLC\n\n"
        << "Usage: " << utxx::path::program::name()
-       << " -f MDFilename [-o|-O OutputDir] [-d] [-q]\n"
+       << " -f MDFilename [-o|-O OutputFile] [-d] [-q]\n"
        << "\nOptions:\n"
-       << "  -f MDFilename        - filename with KRX market data\n"
-       << "  -o|--dir OutFile     - output filename (def: stdout)\n"
-       << "  -d                   - enable debug printouts\n"
-       << "  -q                   - quiet mode (don't display a progress bar)\n"
+       << "  -f MDFilename         - filename with KRX market data\n"
+       << "  -o|--output OutFile   - output filename (def: stdout)\n"
+       << "  -d                    - enable debug printouts\n"
+       << "  -D                    - include YYYYMMDD in timestamp printout\n"
+       << "  -q                    - quiet mode (don't display a progress bar)\n"
+       << "  -Q|--quotes           - print quotes\n"
+       << "  -T|--trades           - print trades\n"
+       << "  -C|--candles Resol    - print candles of given resolution\n"
+       << "                             Valid resolutions: Ny, where:\n"
+       << "                               N - resolution interval\n"
+       << "                               y - (s)econds, (m)inutes, (h)ours\n"
+       << "                          Example: 10m - ten minutes, 1h - one hour\n"
        << "\n";
   exit(1);
 }
@@ -51,6 +65,70 @@ void UnhandledException() {
 }
 
 //------------------------------------------------------------------------------
+struct Printer {
+  Printer(SecDBFileIO& a_file, ostream& a_out, uint a_stream_mask, bool a_fulldate)
+    : m_file(a_file), m_out(a_out), m_stream_mask(a_stream_mask)
+    , m_datefmt(a_fulldate ? utxx::DATE_TIME_WITH_USEC : utxx::TIME_WITH_USEC)
+  {
+    if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0)
+      m_out << "#Time|M|Bids|Asks" << endl;
+    if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0)
+      m_out << "#Time|T|Side|Price|Qty|TradeID|OrderID" << endl;
+  }
+
+  bool operator()(SecondsSample const& a_sec) {
+    return true;
+  }
+
+  bool operator()(QuoteSample<SecDBFileIO::MAX_DEPTH(), int> const& a) {
+    if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
+      m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
+            << "|M|";
+      int i = 0;
+      for (auto p = a.BestBid(), e = a.EndBid(); p != e; a.NextBid(p), ++i)
+        m_out << (i ? "," : "")
+              << std::setprecision(m_file.PxPrecision()) << std::fixed
+              << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
+      m_out << '|';
+      i = 0;
+      for (auto p = a.BestAsk(), e = a.EndAsk(); p != e; a.NextAsk(p), ++i)
+        m_out << (i ? "," : "")
+              << std::setprecision(m_file.PxPrecision()) << std::fixed
+              << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
+      m_out << endl;
+    }
+    return true;
+  }
+
+  bool operator()(TradeSample const& a_trade) {
+    if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0) {
+      m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
+            << "|T|" << ToChar(a_trade.Side()) << '|'
+            << std::setprecision(m_file.PxPrecision()) << std::fixed
+            << (m_file.PxStep() * a_trade.Price())
+            << '|' << a_trade.Qty() << '|' << ToChar(a_trade.Aggr()) << '|';
+      if (a_trade.HasTradeID()) m_out << a_trade.TradeID();
+      m_out << '|';
+      if (a_trade.HasOrderID()) m_out << a_trade.OrderID();
+      m_out << endl;
+    }
+    return true;
+  }
+
+  template <typename T>
+  bool operator()(T const& a_other) {
+    UTXX_THROW_RUNTIME_ERROR("Unsupported stream type");
+    return true;
+  }
+
+private:
+  SecDBFileIO&      m_file;
+  ostream&          m_out;
+  uint              m_stream_mask;
+  utxx::stamp_type  m_datefmt;
+};
+
+//------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 //------------------------------------------------------------------------------
 {
@@ -60,23 +138,52 @@ int main(int argc, char* argv[])
   set_terminate(&UnhandledException);
 
   std::string filename;
-  bool        quiet   = false;
-  int         debug   = 0;
+  bool        fulldate    = false;
+  bool        quiet       = false;
+  int         debug       = 0;
   std::string outfile;
+  std::string sresol;
+  int         resol       = 0;
+  uint        stream_mask = 0;
 
+  //----------------------------------------------------------------------------
+  // Parse options
+  //----------------------------------------------------------------------------
   utxx::opts_parser opts(argc, argv);
   while  (opts.next()) {
-      if (opts.match("-f", "",         &filename)) continue;
-      if (opts.match("-d", "--debug"))  { debug++; continue; }
-      if (opts.match("-q", "--quiet",     &quiet)) continue;
-      if (opts.match("-o", "--output",  &outfile)) continue;
+      if (opts.match("-f", "",         &filename))  continue;
+      if (opts.match("-d", "--debug"))  { debug++;  continue; }
+      if (opts.match("-D", "--full-date", &fulldate)) continue;
+      if (opts.match("-q", "--quiet",     &quiet))  continue;
+      if (opts.match("-o", "--output",  &outfile))  continue;
+      if (opts.match("-Q", "--quotes")) {
+        stream_mask |= 1u << int(StreamType::Quotes);
+        continue;
+      }
+      if (opts.match("-T", "--trades")) {
+        stream_mask |= 1u << int(StreamType::Trade);
+        continue;
+      }
+      if (opts.match("-C", "--candles", &sresol))   continue;
 
       if (opts.is_help()) Usage();
 
       Usage(string("Invalid option: ") + opts());
   }
 
-  if (filename.empty()) Usage("Missing required option -f");
+  if (filename.empty())                 Usage("Missing required option -f");
+  if (!stream_mask && !sresol.empty())  Usage("Missing -Q|-T|-C");
+  if (!sresol.empty()) {
+    auto s =  utxx::fast_atoi<int, false>
+              (sresol.c_str(), sresol.c_str()+sresol.size(), resol);
+    if (!s || resol < 1 || resol > 60)
+      UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution requested: ", resol);
+
+    if      (toupper(*s) == 'S') resol *= 1;
+    else if (toupper(*s) == 'M') resol *= 60;
+    else if (toupper(*s) == 'H') resol *= 3600;
+    else UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution: ", resol);
+  }
 
   auto file = fopen(filename.c_str(), "r");
 
@@ -85,7 +192,9 @@ int main(int argc, char* argv[])
 
   long file_size = utxx::path::file_size(filename);
 
-  // Outfile file stream
+  //----------------------------------------------------------------------------
+  // Create output stream
+  //----------------------------------------------------------------------------
   ofstream out;
 
   // If output file not given, use stdout
@@ -111,10 +220,21 @@ int main(int argc, char* argv[])
       show_progress.reset(new boost::progress_display(file_size, cerr));
   }
 
+  //----------------------------------------------------------------------------
   // Open SecDB file for reading
-  BaseSecDBFileIO<3> output(filename, debug);
+  //----------------------------------------------------------------------------
+  SecDBFileIO output(filename, debug);
+
+  if (resol)
+    output.PrintCandles(out, resol);
+  else {
+    Printer printer(output, out, stream_mask, fulldate);
+    output.Read(printer);
+  }
 
   output.Close();
 
   return 0;
 }
+
+//------------------------------------------------------------------------------
