@@ -167,7 +167,7 @@ install(
 #-------------------------------------------------------------------------------
 enable_testing()
 
-add_test(test-secdb/io     test/test-secdb  -l test_suite)
+add_test(test-sdb/io     test/test-sdb  -l test_suite)
 
 #-------------------------------------------------------------------------------
 # DEBUGging options

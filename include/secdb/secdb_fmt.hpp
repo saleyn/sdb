@@ -555,33 +555,33 @@ private:
 //------------------------------------------------------------------------------
 struct TradeSample : public StreamBase {
   struct FieldMask {
-    bool _unused      : 1;
-    bool has_order_id : 1;
-    bool has_trade_id : 1;
-    bool has_qty      : 1;
-    bool side         : 1;
-    char aggr         : 2;
     bool internal     : 1;
+    char aggr         : 2;
+    bool side         : 1;
+    bool has_qty      : 1;
+    bool has_trade_id : 1;
+    bool has_order_id : 1;
+    bool _unused      : 1;
 
     FieldMask()           { *(uint8_t*)this = 0; }
     FieldMask(uint8_t a)  { *(uint8_t*)this = a; }
     FieldMask(FieldMask const&) = default;
     FieldMask(bool a_internal, AggrT a_aggr,    SideT a_sd,
               bool a_has_qty,  bool  a_has_oid, bool  a_has_trid)
-      :_unused      (false)
-      , has_order_id(a_has_oid)
-      , has_trade_id(a_has_trid)
-      , has_qty     (a_has_qty)
-      , side        (a_sd == SideT::Sell)
+      : internal    (a_internal)
       , aggr        ((int)a_aggr)
-      , internal    (a_internal)
+      , side        (a_sd == SideT::Sell)
+      , has_qty     (a_has_qty)
+      , has_trade_id(a_has_trid)
+      , has_order_id(a_has_oid)
+      ,_unused      (false)
     {
       static_assert(sizeof(FieldMask) == sizeof(uint8_t), "Invalid size");
     }
   };
 
   TradeSample() {}
-  TradeSample(bool a_delta, FieldMask a_mask, uint a_ts, PriceT a_px, int a_qty,
+  TradeSample(bool a_delta, FieldMask a_mask, uint a_ts, PriceT a_px, uint a_qty,
               size_t a_ord_id = 0, size_t a_trade_id = 0)
     : StreamBase(a_delta, StreamType::Trade)
     , m_mask    (a_mask)
@@ -627,7 +627,7 @@ struct TradeSample : public StreamBase {
   void      TradeID(size_t a)   { m_trade_id = a; m_mask.has_trade_id = true; }
   void      OrderID(size_t a)   { m_order_id = a; m_mask.has_order_id = true; }
   void      Price  (PriceT a)   { m_px       = a; }
-  void      Qty    (int    a)   { m_qty      = a; m_mask.has_qty      = true; }
+  void      Qty    (uint   a)   { m_qty      = a; m_mask.has_qty      = true; }
 
   void      Set(FieldMask a, PriceT a_px, int a_qty, size_t a_tid, size_t a_oid);
 
@@ -643,7 +643,7 @@ private:
   size_t    m_trade_id;
   size_t    m_order_id;
   PriceT    m_px;
-  int       m_qty;
+  uint      m_qty;
 };
 
 } // namespace secdb

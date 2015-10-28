@@ -69,5 +69,5 @@ BOOST_AUTO_TEST_CASE( test_secdb )
     BOOST_CHECK_EQUAL(ToString(uuid),  ToString(sdb.Info().UUID()));
   }
 
-  BOOST_CHECK_EQUAL(2564, utxx::path::file_size(file));
+  BOOST_CHECK_EQUAL(2546, utxx::path::file_size(file));
 }

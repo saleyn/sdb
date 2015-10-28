@@ -155,7 +155,7 @@ struct BaseSecDBFileIO {
     time_val  a_ts,
     SideT     a_side,
     PxT       a_px,
-    int       a_qty,
+    uint      a_qty,
     AggrT     a_aggr     = AggrT::Undefined,
     size_t    a_ord_id   = 0,
     size_t    a_trade_id = 0
@@ -179,13 +179,13 @@ struct BaseSecDBFileIO {
   );
 
   /// Flush the unwritten data to file stream
-  void Flush()                  { if (m_file) ::fflush(m_file); }
+  void Flush()                 { if (m_file) ::fflush(m_file); }
   void Finalize();
 
   /// Print candles to an output stream
   /// @param out output stream
   /// @param a_resolution output only cangles matching this resolution
-  void   PrintCandles(std::ostream& out, int a_resolution = -1) const;
+  void PrintCandles(std::ostream& out, int a_resolution = -1) const;
 
   /// Read all samples from file and invoke \a a_fun callback for each record.
   /// @param a_fun functor (auto& record) -> bool.
@@ -193,6 +193,8 @@ struct BaseSecDBFileIO {
   void Read(Visitor a_fun);
 
 private:
+  static constexpr int NaN() { return std::numeric_limits<int>::lowest(); }
+
   FILE*       m_file          = nullptr;
   OpenMode    m_mode          = OpenMode::Read;
   int         m_debug         = 0;
@@ -203,8 +205,8 @@ private:
   int         m_last_usec     = 0;  ///< Last usec within last written sec
   int         m_next_second   = 0;  ///< Next second since midnight to be written
 
-  int         m_last_quote_px = 0;
-  int         m_last_trade_px = 0;
+  int         m_last_quote_px = NaN();
+  int         m_last_trade_px = NaN();
 
   StreamsMeta m_streams_meta;
   CandlesMeta m_candles_meta;
@@ -215,7 +217,7 @@ private:
 
   /// Normalize price given in price steps to price units \a PU
   template <PriceUnit PU, typename T>
-  int  NormalizePx(T a_px);
+  int    NormalizePx(T a_px);
 
   template <OpenMode Mode>
   size_t DoOpen(std::string const& a_filename, int a_perm = 0640);

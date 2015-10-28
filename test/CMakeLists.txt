@@ -1,19 +1,19 @@
 # This must be AFTER link_directories
-add_executable(test-secdb
+add_executable(test-sdb
     test_secdb.cpp
     test_secdb_io.cpp
 )
 
-target_compile_definitions(test-secdb PUBLIC -DBOOST_TEST_DYN_LINK -D_REENTRANT)
+target_compile_definitions(test-sdb PUBLIC -DBOOST_TEST_DYN_LINK -D_REENTRANT)
 
 target_link_libraries(
-    test-secdb
+    test-sdb
     ${Boost_LIBRARIES}
     ${Utxx_LIBRARIES}
-    secdb
+    sdb
     boost_unit_test_framework
 )
 
-add_dependencies(test-secdb secdb)
+add_dependencies(test-sdb secdb)
 
-install(TARGETS test-secdb  RUNTIME DESTINATION test)
+install(TARGETS test-sdb  RUNTIME DESTINATION test)

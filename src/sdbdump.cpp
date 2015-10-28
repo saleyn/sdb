@@ -1,8 +1,8 @@
 // vim:ts=2:sw=2:et
 //-----------------------------------------------------------------------------
-/// \file  secdb_krx_fmt.hpp
+/// \file  sdbdump.hpp
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SecDB file reader
 ///
 /// \see https://github.com/saleyn/secdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ void Usage(std::string const& a_text = "")
   if (!a_text.empty())
     cout << a_text << endl << endl;
 
-  cout << "SecDB file format reader\n"
+  cout << "SecDB file reader\n"
        << "Copyright (c) 2015 Omnibius, LLC\n\n"
        << "Usage: " << utxx::path::program::name()
        << " -f MDFilename [-o|-O OutputFile] [-d] [-q]\n"
@@ -210,7 +210,7 @@ int main(int argc, char* argv[])
   auto file = fopen(filename.c_str(), "r");
 
   if (!file)
-    UTXX_THROW_IO_ERROR(errno, "Cannot open file ", outfile);
+    UTXX_THROW_IO_ERROR(errno, "Cannot open file ", filename);
 
   long file_size = utxx::path::file_size(filename);
 

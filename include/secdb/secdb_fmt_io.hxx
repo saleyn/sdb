@@ -215,8 +215,8 @@ Close()
   m_last_ts.clear();
   m_last_sec      = 0;
   m_last_usec     = 0;
-  m_last_quote_px = 0;
-  m_last_trade_px = 0;
+  m_last_quote_px = NaN();
+  m_last_trade_px = NaN();
 }
 
 //------------------------------------------------------------------------------
@@ -352,6 +352,8 @@ WriteSeconds(time_val a_now)
       UTXX_THROW_IO_ERROR(errno, "Error writing seconds to file ",
                           m_filename, " at ", ftell(m_file));
     m_next_second = m_last_sec+1;
+    m_last_quote_px = NaN();
+    m_last_trade_px = NaN();
 
     return true;
   }
@@ -429,19 +431,19 @@ WriteQuotes
   bool sec_chng   = WriteSeconds(a_ts);
 
   auto ts         = sec_chng ? m_last_usec : (m_last_usec - prev_usec);
-  m_last_quote_px = first_px;
 
   // StreamBase - when sec_chng is true, this is a Full quote; otherwise: Delta
-  bool delta = !sec_chng;
+  bool delta = m_last_quote_px != NaN();
 
   using QuoteSampleT = QuoteSample<MaxDepth*2, PriceT>;
 
-  auto book = typename QuoteSampleT::PxLevelsT();
-  auto q    = &book[0];
-  q->m_px   = sec_chng ? first_px : first_px - m_last_quote_px;
-  q->m_qty  = qty;
+  auto  book = typename QuoteSampleT::PxLevelsT();
+  auto  q    = &book[0];
+  q->m_px    = delta ? first_px - m_last_quote_px : first_px;
+  q->m_qty   = qty;
 
-  auto prev_px = first_px;
+  m_last_quote_px = first_px;
+  auto    prev_px = first_px;
 
   // Remaining Bids (a_bids are in descending order, so we go in reverse dir)
   for (++q; pb != pb_end; --pb, ++q) {
@@ -477,7 +479,7 @@ WriteTrade
   time_val  a_ts,
   SideT     a_side,
   PxT       a_px,
-  int       a_qty,
+  uint      a_qty,
   AggrT     a_aggr,
   size_t    a_ord_id,
   size_t    a_trade_id
@@ -492,20 +494,22 @@ WriteTrade
   // If the seconds advanced, write the new second since midnight (StreamID=0)
   int  prev_usec  = m_last_usec;
   bool sec_chng   = WriteSeconds(a_ts);
-
-  auto px         = NormalizePx<PU>(a_px);
-  auto px_inc     = sec_chng ? px          : (px -    m_last_trade_px);
   auto ts         = sec_chng ? m_last_usec : (m_last_usec - prev_usec);
-  m_last_trade_px = px;
 
-  // StreamBase - when sec_chng is true, this is a Full quote; otherwise: Delta
-  bool delta = !sec_chng;
+  // When seconds changed, this is a Full quote; otherwise: Delta
+  bool delta      = m_last_trade_px != NaN();
+  auto px         = NormalizePx<PU>(a_px);
+  auto px_inc     = delta ? (px - m_last_trade_px) : px;
+
+  m_last_trade_px = px;
 
   TradeSample tr(delta, ts, a_side, px_inc, a_qty, a_aggr, a_ord_id, a_trade_id);
 
   int sz = tr.Write(m_file);
 
-  m_candles_meta.UpdateCandles(m_last_sec, px, a_qty);
+  // Update candles using this trade
+  int qty = a_side == SideT::Buy ? int(a_qty) : -int(a_qty);
+  m_candles_meta.UpdateCandles(m_last_sec, px, qty);
 
   if (sz < 0)
     UTXX_THROW_IO_ERROR
@@ -593,8 +597,8 @@ Read(OnSample a_fun)
 
   utxx::dynamic_io_buffer buf(4096);
 
-  m_last_quote_px = 0;
-  m_last_trade_px = 0;
+  m_last_quote_px = NaN();
+  m_last_trade_px = NaN();
 
   while (true) {
     long n = fread(buf.wr_ptr(), 1, buf.capacity(), m_file);
@@ -617,11 +621,13 @@ Read(OnSample a_fun)
           SecondsSample ss;
           n = ss.Read(buf.rd_ptr(), buf.size());
           if (n > 0) {
-            time_t secs   = m_header.Midnight() + ss.Time();
+            time_t secs     = m_header.Midnight() + ss.Time();
             m_last_ts.set(secs);
-            m_last_sec    = secs;
-            m_last_usec   = 0;
-            m_next_second = m_last_sec + 1;
+            m_last_sec      = secs;
+            m_last_usec     = 0;
+            m_next_second   = m_last_sec + 1;
+            m_last_quote_px = NaN();
+            m_last_trade_px = NaN();
           }
           break;
         }
