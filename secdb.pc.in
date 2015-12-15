@@ -5,7 +5,8 @@ includedir=@CMAKE_INSTALL_PREFIX@/include
 
 Name: @PROJECT_NAME@
 Description: SecDB C++ Library.
-Requires: boost_1_49_0 utxx
+#Requires: boost_1_49_0 utxx
+Requires: utxx
 Version: @PROJECT_VERSION@
 Libs: -L${libdir} -lsecdb -lutxx
 Cflags: -I${includedir}
