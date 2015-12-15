@@ -22,7 +22,7 @@ Dependencies:
 ```
 git clone https://github.com/saleyn/secdb.git
 cd secdb
-make bootstrap
+make bootstrap [prefix=/install/path]
 make
 make install
 ```

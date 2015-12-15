@@ -21,7 +21,7 @@ bootstrap:
         -DCMAKE_USER_MAKE_RULES_OVERRIDE=$(DIR)/build/CMakeInit.txt \
         -DCMAKE_INSTALL_PREFIX=$(prefix) \
         -DCMAKE_BUILD_TYPE=$(build) $(if $(debug),-DDEBUG=vars) \
-        $(patsubst %,-D%,$(filter-out --,$(MAKEFLAGS))) \
+        $(patsubst %,-D%,$(filter-out toolchain=% generator=% build=% verbose=%,$(MAKEOVERRIDES))) \
         $(patsubst %,-D%,$(shell F=.cmake-args.$$HOSTNAME && [ -f "$$F" ] && cat $$F | xargs))
 
 %:

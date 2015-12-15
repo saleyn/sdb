@@ -175,7 +175,7 @@ struct Header  {
   /// Write header to a file descriptor
   int Write(FILE* a_file, int a_debug = 0);
 
-  std::ostream& Print(std::ostream& out, const std::string& a_indent = "");
+  std::ostream& Print(std::ostream& out, const std::string& a_ident = "") const;
 
 private:
   uint32_t    m_version       = 0;

@@ -1,6 +1,6 @@
 # vim:ts=4:sw=4:et
 cmake_minimum_required(VERSION 3.0)
-project(secdb)
+project(secdb VERSION 0.1)
 
 #-------------------------------------------------------------------------------
 # CMAKE options customization
@@ -87,6 +87,7 @@ if(WITH_THRIFT)
     # Determine thrift include/libs
     set(ENV{PKG_CONFIG_PATH} "${Thrift_DIR}/gcc/lib/pkgconfig")
     pkg_search_module(Thrift REQUIRED thrift)
+    message(STATUS "Thrift found: ${Thrift_DIR}")
 endif()
 
 # Boost (with local modifications):
@@ -118,16 +119,26 @@ set(Boost_LIBRARIES
 set(ENV{PKG_CONFIG_PATH} "${Utxx_DIR}/gcc/lib/pkgconfig:${Utxx_DIR}/lib/pkgconfig")
 pkg_search_module(Utxx REQUIRED utxx)
 
+message(STATUS "Boost found: ${BOOST_ROOT}")
+message(STATUS "Utxx  found: ${Utxx_DIR}")
+
 #-------------------------------------------------------------------------------
 # MAKE custom targets
 #-------------------------------------------------------------------------------
 
-add_custom_target(dist-clean
+add_custom_target(distclean
    COMMAND ${CMAKE_BUILD_TOOL} clean
-   COMMAND ${CMAKE_COMMAND} -P dist-clean.cmake
+   COMMAND ${CMAKE_COMMAND} -P distclean.cmake
 )
 
 add_definitions(-DBOOST_SYSTEM_NO_DEPRECATED)
+
+#-------------------------------------------------------------------------------
+# Configure files
+#-------------------------------------------------------------------------------
+configure_file("${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc.in"
+               "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc"
+               @ONLY)
 
 #-------------------------------------------------------------------------------
 # MAKE options
@@ -152,7 +163,7 @@ add_subdirectory(test)
 # INSTALL options
 #-------------------------------------------------------------------------------
 install(
-    DIRECTORY      c_src/
+    DIRECTORY      ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/
     DESTINATION    ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.hxx"
 )
@@ -161,6 +172,15 @@ install(
                 ${CMAKE_SOURCE_DIR}/README.md
     DESTINATION ${CMAKE_INSTALL_PREFIX}
 )
+install(
+	FILES 		${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig
+)
+
+#-------------------------------------------------------------------------------
+# Post-install script (installation of symlinks):
+#-------------------------------------------------------------------------------
+install(SCRIPT ${CMAKE_SOURCE_DIR}/build/install-symlinks.cmake)
 
 #-------------------------------------------------------------------------------
 # CTEST options
@@ -168,14 +188,3 @@ install(
 enable_testing()
 
 add_test(test-sdb/io     test/test-sdb  -l test_suite)
-
-#-------------------------------------------------------------------------------
-# DEBUGging options
-#-------------------------------------------------------------------------------
-# Add easy way to view all cmake variables with -DDEBUG=vars option:
-if("${DEBUG}" MATCHES "vars")
-    get_cmake_property(_vars VARIABLES)
-    foreach (_var ${_vars})
-        message(STATUS "${_var}=${${_var}}")
-    endforeach()
-endif()

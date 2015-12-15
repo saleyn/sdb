@@ -75,7 +75,9 @@ template <uint MaxDepth, typename PxT>
 int QuoteSample<MaxDepth, PxT>::
 Read(const char* a_buf, size_t a_sz, bool a_is_delta, PxT& a_last_px)
 {
+#ifndef NDEBUG
   static constexpr uint8_t s_stream_id = uint8_t(StreamType::Quotes);
+#endif
 
   auto begin = a_buf;
   auto end   = a_buf + a_sz;

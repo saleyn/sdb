@@ -143,23 +143,23 @@ int Header::Write(FILE* a_file, int a_debug)
 //------------------------------------------------------------------------------
 // Print file header
 //------------------------------------------------------------------------------
-std::ostream& Header::Print(std::ostream& out, const std::string& a_indent)
+std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
 {
   return out
-    << a_indent << "Version....: " << m_symbol       << '\n'
-    << a_indent << "Date.......: " << utxx::timestamp::to_string
+    << a_ident << "Version....: " << m_symbol       << '\n'
+    << a_ident << "Date.......: " << utxx::timestamp::to_string
                                       (time_val(utxx::secs(m_date)),
                                        utxx::DATE, true)
                                    << " UTC (" << TZ().c_str() << ")\n"
-    << a_indent << "Exchange...: " << m_exchange     << '\n'
-    << a_indent << "Symbol.....: " << m_symbol       << '\n'
-    << a_indent << "Instrument.: " << m_instrument   << '\n'
-    << a_indent << "SecID......: " << m_secid        << '\n'
-    << a_indent << "Depth......: " << m_depth        << '\n'
-    << a_indent << "PxStep.....: " << m_px_step      << '\n'
-    << a_indent << "PxPrecision: " << m_px_precision << '\n'
-    << a_indent << "PxScale....: " << m_px_scale     << '\n'
-    << a_indent << "UUID.......: " << boost::uuids::to_string(m_uuid) << '\n';
+    << a_ident << "Exchange...: " << m_exchange     << '\n'
+    << a_ident << "Symbol.....: " << m_symbol       << '\n'
+    << a_ident << "Instrument.: " << m_instrument   << '\n'
+    << a_ident << "SecID......: " << m_secid        << '\n'
+    << a_ident << "Depth......: " << m_depth        << '\n'
+    << a_ident << "PxStep.....: " << m_px_step      << '\n'
+    << a_ident << "PxPrecision: " << m_px_precision << '\n'
+    << a_ident << "PxScale....: " << m_px_scale     << '\n'
+    << a_ident << "UUID.......: " << boost::uuids::to_string(m_uuid) << '\n';
 }
 
 //------------------------------------------------------------------------------
@@ -220,7 +220,9 @@ int SecondsSample::Write(FILE* a_file)
 //------------------------------------------------------------------------------
 int SecondsSample::Read(const char* a_buf, size_t a_sz)
 {
+#ifndef NDEBUG
   static constexpr uint8_t s_stream_id = uint8_t(StreamType::Seconds);
+#endif
 
   auto begin = a_buf;
   auto end   = a_buf + a_sz;
@@ -595,7 +597,9 @@ int TradeSample::Write(FILE* a_file)
 int TradeSample::Read(const char* a_buf, size_t a_sz,
                       bool a_is_delta, PriceT& a_last_px)
 {
+#ifndef NDEBUG
   static constexpr uint8_t s_stream_id = uint8_t(StreamType::Trade);
+#endif
 
   auto begin = a_buf;
   auto end   = a_buf + a_sz;

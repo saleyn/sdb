@@ -208,8 +208,16 @@ int main(int argc, char* argv[])
     boost::split(fields, buf, boost::is_any_of(" |"),
         boost::algorithm::token_compress_on);
 
-    if (fields.size() != int(MD::SIZE)) {
-      cerr << "Invalid record format:\n  " << buf << endl;
+    if (fields.size() == 19) {
+      // This is the format containing 5 price levels rather than 3.
+      // Throw out the extra two levels
+      fields.erase(fields.begin()+11, fields.begin()+13); // Remove L4AVo,L5AVo
+      fields.erase(fields.begin()+5,  fields.begin()+7);  // Remove L4BVo,L5BVo
+    }
+    else if (fields.size() != int(MD::SIZE)) {
+      cerr << "Invalid record format (expected " << int(MD::SIZE)
+           << " fields, got " << fields.size() << "):\n  " << buf
+           << endl;
       continue;
     }
 

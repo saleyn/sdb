@@ -42,10 +42,10 @@ void Usage(std::string const& a_text = "")
        << "  -f MDFilename         - filename with KRX market data\n"
        << "  -o|--output OutFile   - output filename (def: stdout)\n"
        << "  -d                    - enable debug printouts\n"
-       << "  -D                    - include YYYYMMDD in timestamp output\n"
-       << "  -s                    - include symbol name in the output\n"
-       << "  -i                    - include instrument name in the output\n"
        << "  -q                    - quiet mode (don't display a progress bar)\n"
+       << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  -S|--symbol           - include symbol name in the output\n"
+       << "  -I|--instr            - include instrument name in the output\n"
        << "  -Q|--quotes           - print quotes\n"
        << "  -T|--trades           - print trades\n"
        << "  -C|--candles Resol    - print candles of given resolution\n"
@@ -156,6 +156,7 @@ int main(int argc, char* argv[])
   set_terminate(&UnhandledException);
 
   std::string filename;
+  bool        info        = false;
   bool        fulldate    = false;
   bool        quiet       = false;
   bool        with_symbol = false;
@@ -172,12 +173,13 @@ int main(int argc, char* argv[])
   utxx::opts_parser opts(argc, argv);
   while  (opts.next()) {
       if (opts.match("-f", "",            &filename)) continue;
+      if (opts.match("-i", "--info",          &info)) continue;
       if (opts.match("-d", "--debug"))  { debug++;    continue; }
       if (opts.match("-D", "--full-date", &fulldate)) continue;
       if (opts.match("-q", "--quiet",        &quiet)) continue;
       if (opts.match("-o", "--output",     &outfile)) continue;
-      if (opts.match("-s", "--symbol", &with_symbol)) continue;
-      if (opts.match("-i", "--instr",   &with_instr)) continue;
+      if (opts.match("-S", "--symbol", &with_symbol)) continue;
+      if (opts.match("-I", "--instr",   &with_instr)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
         continue;
@@ -193,18 +195,20 @@ int main(int argc, char* argv[])
       Usage(string("Invalid option: ") + opts());
   }
 
-  if (filename.empty())                 Usage("Missing required option -f");
-  if (!stream_mask && !sresol.empty())  Usage("Missing -Q|-T|-C");
-  if (!sresol.empty()) {
-    auto s =  utxx::fast_atoi<int, false>
-              (sresol.c_str(), sresol.c_str()+sresol.size(), resol);
-    if (!s || resol < 1 || resol > 60)
-      UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution requested: ", resol);
+  if (filename.empty())                   Usage("Missing required option -f");
+  if (!info) {
+    if (!stream_mask && !sresol.empty())  Usage("Missing -Q|-T|-C");
+    if (!sresol.empty()) {
+      auto s =  utxx::fast_atoi<int, false>
+                (sresol.c_str(), sresol.c_str()+sresol.size(), resol);
+      if (!s || resol < 1 || resol > 60)
+        UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution requested: ", resol);
 
-    if      (toupper(*s) == 'S') resol *= 1;
-    else if (toupper(*s) == 'M') resol *= 60;
-    else if (toupper(*s) == 'H') resol *= 3600;
-    else UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution: ", resol);
+      if      (toupper(*s) == 'S') resol *= 1;
+      else if (toupper(*s) == 'M') resol *= 60;
+      else if (toupper(*s) == 'H') resol *= 3600;
+      else UTXX_THROW_RUNTIME_ERROR("Invalid candle resolution: ", resol);
+    }
   }
 
   auto file = fopen(filename.c_str(), "r");
@@ -247,7 +251,10 @@ int main(int argc, char* argv[])
   //----------------------------------------------------------------------------
   SecDBFileIO output(filename, debug);
 
-  if (resol)
+  if (info) {
+    if (!debug)
+      output.Info().Print(std::cout);
+  } else if (resol)
     output.PrintCandles(out, resol);
   else {
     Printer printer
