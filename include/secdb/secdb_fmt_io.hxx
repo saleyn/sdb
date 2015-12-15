@@ -55,19 +55,21 @@ Filename
   char c = utxx::path::slash();
   const char suffix[] = ".sdb";
 
+  auto instr = a_instr;
+  std::replace(instr.begin(), instr.end(), '/', '-');
   name.print(a_dir, c);
 
   if (a_deep_dir)
     name.print(a_xchg, c, a_sym, c, y, c,
                utxx::width<2,utxx::RIGHT,int>(m, '0'), c,
-               a_instr, '.', y,
+               instr, '.', y,
                utxx::width<2,utxx::RIGHT,int>(m, '0'),
                utxx::width<2,utxx::RIGHT,int>(d, '0'));
   else
     name.print(y,
                utxx::width<2,utxx::RIGHT,int>(m, '0'),
                utxx::width<2,utxx::RIGHT,int>(d, '0'),
-               '.', a_xchg, '.', a_sym, '.', a_instr);
+               '.', a_xchg, '.', a_sym, '.',   instr);
 
   name.print(suffix);
   return name.to_string();
