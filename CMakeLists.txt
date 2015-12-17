@@ -17,13 +17,13 @@ endif()
 # Toolchain
 #-------------------------------------------------------------------------------
 # See also build/CMakeInit.txt
-if("${TOOLCHAIN}" STREQUAL "gcc")
+if(TOOLCHAIN STREQUAL "gcc")
     set(CMAKE_C_COMPILER   "gcc")
     set(CMAKE_CXX_COMPILER "g++")
     add_definitions(-Wno-unused-local-typedefs -Wno-strict-aliasing -fopenmp
                     -std=c++1y)
 
-    if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_definitions(-flto -funroll-loops -fomit-frame-pointer)
 
         # The following will omit all symbol information from the build:
@@ -35,12 +35,12 @@ if("${TOOLCHAIN}" STREQUAL "gcc")
     #    add_definitions(-flto -funroll-loops -fomit-frame-pointer -Wl,-s)
     #    set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -s")
     #endif()
-elseif("${TOOLCHAIN}" STREQUAL "intel")
+elseif(TOOLCHAIN STREQUAL "intel")
     set(CMAKE_C_COMPILER   "icc")
     set(CMAKE_CXX_COMPILER "icpc")
     add_definitions(-openmp)
 
-elseif("${TOOLCHAIN}" STREQUAL "clang")
+elseif(TOOLCHAIN STREQUAL "clang")
     set(CMAKE_C_COMPILER   "clang")
     set(CMAKE_CXX_COMPILER "clang++")
     add_definitions(-std=c++1y)
@@ -49,6 +49,10 @@ else()
 endif()
 
 message(STATUS "Configuring for the ${TOOLCHAIN} toolchain")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(lib_suffix "_d")
+endif()
 
 #-------------------------------------------------------------------------------
 # Policies
@@ -126,11 +130,6 @@ message(STATUS "Utxx  found: ${Utxx_DIR}")
 # MAKE custom targets
 #-------------------------------------------------------------------------------
 
-add_custom_target(distclean
-   COMMAND ${CMAKE_BUILD_TOOL} clean
-   COMMAND ${CMAKE_COMMAND} -P distclean.cmake
-)
-
 add_definitions(-DBOOST_SYSTEM_NO_DEPRECATED)
 
 #-------------------------------------------------------------------------------
@@ -180,7 +179,7 @@ install(
 #-------------------------------------------------------------------------------
 # Post-install script (installation of symlinks):
 #-------------------------------------------------------------------------------
-install(SCRIPT ${CMAKE_SOURCE_DIR}/build/install-symlinks.cmake)
+install(SCRIPT ${CMAKE_SOURCE_DIR}/build-aux/install-symlinks.cmake)
 
 #-------------------------------------------------------------------------------
 # CTEST options

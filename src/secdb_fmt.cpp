@@ -145,18 +145,20 @@ int Header::Write(FILE* a_file, int a_debug)
 //------------------------------------------------------------------------------
 std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
 {
+  char buf[16];
+  utxx::timestamp::write_date(buf, m_date, true, 10, '-');
+
   return out
-    << a_ident << "Version....: " << m_symbol       << '\n'
-    << a_ident << "Date.......: " << utxx::timestamp::to_string
-                                      (time_val(utxx::secs(m_date)),
-                                       utxx::DATE, true)
-                                   << " UTC (" << TZ().c_str() << ")\n"
+    << a_ident << "Version....: " << m_version      << '\n'
+    << a_ident << "Date.......: " << buf << " UTC (" << TZ().c_str() << ")\n"
     << a_ident << "Exchange...: " << m_exchange     << '\n'
     << a_ident << "Symbol.....: " << m_symbol       << '\n'
     << a_ident << "Instrument.: " << m_instrument   << '\n'
     << a_ident << "SecID......: " << m_secid        << '\n'
     << a_ident << "Depth......: " << m_depth        << '\n'
-    << a_ident << "PxStep.....: " << m_px_step      << '\n'
+    << a_ident << "PxStep.....: " << std::fixed
+                                  << std::setprecision(m_px_precision)
+                                  << m_px_step      << '\n'
     << a_ident << "PxPrecision: " << m_px_precision << '\n'
     << a_ident << "PxScale....: " << m_px_scale     << '\n'
     << a_ident << "UUID.......: " << boost::uuids::to_string(m_uuid) << '\n';

@@ -483,6 +483,11 @@ template <typename PxT>
 struct PxLevel {
   PxT m_px;
   int m_qty;
+  int m_count;
+
+  void Set(PxT a_px, int a_qty, int a_cnt = 0) {
+    m_px=a_px; m_qty=a_qty; m_count=a_cnt;
+  }
 
   int Encode(char*& a_buf, const char* a_end) const {
     int sz  = sleb128_encode(m_px,  a_buf);

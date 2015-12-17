@@ -44,6 +44,8 @@ struct BaseSecDBFileIO {
 
   static constexpr uint MAX_DEPTH()       { return MaxDepth;              }
 
+  bool                IsOpen()      const { return m_file != nullptr;     }
+
   Header      const&  Info()        const { return m_header;              }
   time_t              Date()        const { return m_header.Date();       }
   time_t              Midnight()    const { return m_header.Midnight();   }

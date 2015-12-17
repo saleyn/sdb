@@ -27,7 +27,7 @@ add_library(sdb SHARED ${SECDB_LIB_SRCS})
 
 set_target_properties(
   sdb PROPERTIES OUTPUT_NAME sdb
-  DEBUG_POSTFIX   "_d"
+  DEBUG_POSTFIX   "${lib_suffix}"
   RELEASE_POSTFIX ""
 )
 

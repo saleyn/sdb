@@ -169,7 +169,7 @@ DoOpen(std::string const& a_name, int a_perm)
     UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
   }
 
-  auto mode = Mode == OpenMode::Read ? O_RDONLY : O_RDWR|O_CREAT;
+  auto mode = Mode == OpenMode::Read ? O_RDONLY : O_RDWR|O_TRUNC;
   int  fd   = ::open(name.c_str(), mode, a_perm);
 
   if  (fd < 0)
