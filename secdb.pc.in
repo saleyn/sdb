@@ -6,7 +6,7 @@ lib_suffix=@lib_suffix@
 
 Name: @PROJECT_NAME@
 Description: SecDB C++ Library.
-Requires: boost utxx
+Requires: utxx
 Version: @PROJECT_VERSION@
 Libs: -L${libdir} -lsdb${lib_suffix}
 Cflags: -I${includedir}

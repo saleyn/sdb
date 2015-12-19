@@ -48,7 +48,7 @@ struct BaseSecDBFileIO {
 
   Header      const&  Info()        const { return m_header;              }
   time_t              Date()        const { return m_header.Date();       }
-  time_t              Midnight()    const { return m_header.Midnight();   }
+  time_val    const&  Midnight()    const { return m_header.Midnight();   }
   std::string const&  Filename()    const { return m_filename;            }
 
   std::string         TZ()          const { return m_header.TZ();         }
@@ -163,6 +163,14 @@ struct BaseSecDBFileIO {
     size_t    a_trade_id = 0
   );
 
+  /// Update the candle corresponding to \a a_ts time
+  /// @param a_qty bought (a_qty > 0) or sold (a_qty < 0) quantity
+  /// @return true on success or false if \a a_ts is outside of range
+  void UpdateCandles(int a_ts, PriceT a_px, int a_qty);
+
+  /// Add the buy/sell volume in the candle corresponding to \a a_ts time
+  void AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty);
+
   /// Write string message
   /// @return number of bytes written
   int WriteMsg(time_val a_ts, const char* a_msg, size_t a_sz);
@@ -182,7 +190,6 @@ struct BaseSecDBFileIO {
 
   /// Flush the unwritten data to file stream
   void Flush()                 { if (m_file) ::fflush(m_file); }
-  void Finalize();
 
   /// Print candles to an output stream
   /// @param out output stream

@@ -65,7 +65,7 @@ int Header::Read(FILE* a_file, size_t a_file_size)
 
   n = ftell(a_file);
 
-  m_date       = utxx::time_val::universal_time(y, m, d, 0, 0, 0).sec();
+  m_date       = utxx::time_val::universal_time(y, m, d, 0, 0, 0);
   m_exchange   = xchg;
   m_symbol     = symb;
   m_instrument = instr;
@@ -81,7 +81,8 @@ int Header::Read(FILE* a_file, size_t a_file_size)
 
   m_px_scale     = m_px_step  != 0.0 ? (int)(1.0 / m_px_step + 0.5) : 0;
   m_px_precision = m_px_scale ? utxx::math::log(m_px_scale,     10) : 0;
-  m_tz_offset    = (tz[0] == '-' ? -1 : 1) * (tz_hh*3600 + tz_mm*60);
+  auto offset    = (tz[0] == '-' ? -1 : 1) * (tz_hh*3600 + tz_mm*60);
+  SetTZOffset(offset);
   m_tz_name      = std::string(tznm, tzlen-1); // exclude closing ')'
   bool eol       = false;
 
@@ -109,7 +110,7 @@ int Header::Write(FILE* a_file, int a_debug)
 
   int  y;
   uint m, d;
-  std::tie(y, m, d) = utxx::from_gregorian_time(m_date);
+  std::tie(y, m, d) = utxx::from_gregorian_time(m_date.sec());
 
   int rc = fprintf(a_file,
     "#!/usr/bin/env secdb\n"
@@ -146,11 +147,11 @@ int Header::Write(FILE* a_file, int a_debug)
 std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
 {
   char buf[16];
-  utxx::timestamp::write_date(buf, m_date, true, 10, '-');
+  utxx::timestamp::write_date(buf, m_date.sec(), true, 10, '-');
 
   return out
     << a_ident << "Version....: " << m_version      << '\n'
-    << a_ident << "Date.......: " << buf << " UTC (" << TZ().c_str() << ")\n"
+    << a_ident << "Date.......: " << buf << " UTC (" << TZ() << ")\n"
     << a_ident << "Exchange...: " << m_exchange     << '\n'
     << a_ident << "Symbol.....: " << m_symbol       << '\n'
     << a_ident << "Instrument.: " << m_instrument   << '\n'
@@ -165,14 +166,17 @@ std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
 }
 
 //------------------------------------------------------------------------------
-std::string Header::TZ() const
+void Header::SetTZOffset(int a_tz_offset)
 {
+  m_tz_offset = a_tz_offset;
+
   char c = m_tz_offset < 0 ? '-' : '+';
-  int  h = m_tz_offset / 3600;
-  int  m = m_tz_offset % 3600 / 60;
+  int  n = abs(m_tz_offset);
+  int  h = n / 3600;
+  int  m = n % 3600 / 60;
   char buf[16];
   sprintf(buf, "%c%02d%02d %s", c, h, m, TZName().c_str());
-  return  buf;
+  m_tz_hhmm = buf;
 }
 
 //------------------------------------------------------------------------------
@@ -196,14 +200,14 @@ void Header::Set
   m_symbol         = a_symbol;
   m_instrument     = a_instr;
   m_secid          = a_secid;
-  m_date           = a_date - (a_date % 86400);
+  m_date           = time_val(utxx::secs(a_date - (a_date % 86400)));
   m_depth          = a_depth;
   m_px_step        = a_px_step;
   m_px_scale       = m_px_step  != 0.0 ? (int)(1.0 / m_px_step + 0.5) : 0;
   m_px_precision   = m_px_scale ? utxx::math::log(m_px_scale,     10) : 0;
-  m_tz_offset      = a_tz_offset;
   m_tz_name        = a_tz_name;
   m_uuid           = a_uuid;
+  SetTZOffset(a_tz_offset);
 }
 
 //==============================================================================
@@ -354,6 +358,21 @@ bool CandleHeader::UpdateCandle(int a_ts, PriceT a_px, int a_qty)
 }
 
 //------------------------------------------------------------------------------
+bool CandleHeader::AddCandleVolume(int a_ts, int a_buy_qty, int a_sell_qty)
+{
+  Candle* c = TimeToCandle(a_ts);
+  if (!c)
+    return false;
+
+  c->AddBVolume(a_buy_qty);
+  c->AddSVolume(a_sell_qty);
+
+  m_last_updated = c;
+
+  return true;
+}
+
+//------------------------------------------------------------------------------
 bool CandleHeader::CommitCandles(FILE* a_file)
 {
   // keeps current file position intact and jump to m_data_offset
@@ -400,6 +419,13 @@ void CandlesMeta::UpdateCandles(int a_ts, PriceT a_px, int a_qty)
 {
   for (auto& c : m_candle_headers)
     c.UpdateCandle(a_ts, a_px, a_qty);
+}
+
+//------------------------------------------------------------------------------
+void CandlesMeta::AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty)
+{
+  for (auto& c : m_candle_headers)
+    c.AddCandleVolume(a_ts, a_buy_qty, a_sell_qty);
 }
 
 //------------------------------------------------------------------------------

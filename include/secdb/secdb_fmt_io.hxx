@@ -169,7 +169,7 @@ DoOpen(std::string const& a_name, int a_perm)
     UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
   }
 
-  auto mode = Mode == OpenMode::Read ? O_RDONLY : O_RDWR|O_TRUNC;
+  auto mode = Mode == OpenMode::Read ? O_RDONLY : O_RDWR|O_CREAT|O_TRUNC;
   int  fd   = ::open(name.c_str(), mode, a_perm);
 
   if  (fd < 0)
@@ -424,9 +424,11 @@ WriteQuotes
 
   if (utxx::unlikely(a_ts < m_last_ts))
     UTXX_THROW_RUNTIME_ERROR
-      ("Attempt to write an out-of-order timestamp ",
-       utxx::timestamp::to_string(a_ts, utxx::TIME_WITH_USEC),
-       "to file ", m_filename);
+      ("Attempt to write an out-of-order timestamp=",
+       utxx::timestamp::to_string(a_ts, utxx::DATE_TIME_WITH_USEC),
+       ", last=",
+       utxx::timestamp::to_string(m_last_ts, utxx::DATE_TIME_WITH_USEC),
+       " to file ", m_filename);
 
   // If the seconds advanced, write the new second since midnight (StreamID=0)
   int  prev_usec  = m_last_usec;
@@ -516,6 +518,22 @@ WriteTrade
   if (sz < 0)
     UTXX_THROW_IO_ERROR
       (errno, "Error writing a trade ", tr.ToString(), " to file ", m_filename);
+}
+
+//------------------------------------------------------------------------------
+template <uint MaxDepth>
+void BaseSecDBFileIO<MaxDepth>::
+UpdateCandles(int a_ts, PriceT a_px, int a_qty)
+{
+  m_candles_meta.UpdateCandles(a_ts, a_px, a_qty);
+}
+
+//------------------------------------------------------------------------------
+template <uint MaxDepth>
+void BaseSecDBFileIO<MaxDepth>::
+AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty)
+{
+  m_candles_meta.AddCandleVolumes(a_ts, a_buy_qty, a_sell_qty);
 }
 
 //------------------------------------------------------------------------------
@@ -623,7 +641,7 @@ Read(OnSample a_fun)
           SecondsSample ss;
           n = ss.Read(buf.rd_ptr(), buf.size());
           if (n > 0) {
-            time_t secs     = m_header.Midnight() + ss.Time();
+            time_t secs     = m_header.Midnight().sec() + ss.Time();
             m_last_ts.set(secs);
             m_last_sec      = secs;
             m_last_usec     = 0;

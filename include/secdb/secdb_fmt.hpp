@@ -128,9 +128,9 @@ struct Header  {
   uint32_t              Version()     const { return m_version;       }
 
   /// UTC Date of the file
-  time_t                Date()        const { return m_date;          }
+  time_t                Date()        const { return m_date.sec();    }
   /// UTC Midnight corresponding to the file date
-  time_t                Midnight()    const { return m_date;          }
+  time_val const&       Midnight()    const { return m_date;          }
 
   int                   TZOffset()    const { return m_tz_offset;     }
   int                   Depth()       const { return m_depth;         }
@@ -150,7 +150,7 @@ struct Header  {
   std::string const&    TZName()      const { return m_tz_name;       }
   void                  TZName(const char* a)      { m_tz_name = a;   }
 
-  std::string           TZ()          const;
+  std::string const&    TZ()          const { return m_tz_hhmm;       }
 
   /// Set values of file header
   /// @param a_tz_name local time zone name
@@ -183,14 +183,17 @@ private:
   std::string m_symbol;
   std::string m_instrument;
   long        m_secid         = 0;
-  time_t      m_date          = 0;
+  time_val    m_date;
   int         m_tz_offset     = 0;
   std::string m_tz_name;
+  std::string m_tz_hhmm;
   int         m_depth         = 10;
   double      m_px_step       = 0.01;
   int         m_px_scale      = 100;
   int         m_px_precision  = 2;
   uuid        m_uuid          = boost::uuids::nil_generator()();
+
+  void SetTZOffset(int a_tz_offset);
 };
 
 //------------------------------------------------------------------------------
@@ -357,8 +360,12 @@ struct CandleHeader {
   void UpdateDataOffset(int a_ts, uint64_t a_data_offset);
 
   /// Update the candle corresponding to \a a_ts time
+  /// @param a_qty bought (a_qty > 0) or sold (a_qty < 0) quantity
   /// @return true on success or false if \a a_ts is outside of range
   bool UpdateCandle(int a_ts, PriceT a_px, int a_qty);
+
+  /// Add the buy/sell volume in the candle corresponding to \a a_ts time
+  bool AddCandleVolume(int a_ts, int a_buy_qty, int a_sell_qty);
 
   /// Update the file with the current candles data
   /// @return true on success or false if there was a problem writing data
@@ -422,10 +429,13 @@ struct CandlesMeta {
   /// @param a_data_offset position of file corrsponding to \a a_ts second
   void UpdateDataOffset(int a_ts, uint64_t a_data_offset);
 
-  /// Update the candles corresponding to \a a_ts time in each candle resolution
-  /// @param a_ts time in seconds since midnight
+  /// Update the candle corresponding to \a a_ts time
+  /// @param a_qty bought (a_qty > 0) or sold (a_qty < 0) quantity
   /// @return true on success or false if \a a_ts is outside of range
   void UpdateCandles(int a_ts, PriceT a_px, int a_qty);
+
+  /// Add the buy/sell volume in the candle corresponding to \a a_ts time
+  void AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty);
 
   /// Update the file with the current candles data for all candle resolutions
   /// @return true on success or false if there was a problem writing data
