@@ -161,7 +161,7 @@ struct Header  {
     std::string const&  a_symbol,
     std::string const&  a_instr,
     long                a_secid,
-    time_t              a_date,
+    time_val            a_date,
     std::string const&  a_tz_name,
     int                 a_tz_offset,
     uint8_t             a_depth,

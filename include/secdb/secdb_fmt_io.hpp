@@ -76,7 +76,7 @@ struct BaseSecDBFileIO {
     std::string const& a_symbol,
     std::string const& a_instr,
     long               a_secid,
-    time_t             a_date
+    time_val           a_date
   );
 
   /// Open file for reading or writing
@@ -99,7 +99,7 @@ struct BaseSecDBFileIO {
     std::string const& a_symbol,
     std::string const& a_instr,
     long               a_secid,
-    time_t             a_date,
+    time_val           a_date,
     std::string const& a_tz_name,
     int                a_tz_offset,
     uint8_t            a_depth   = 5,
@@ -119,7 +119,7 @@ struct BaseSecDBFileIO {
     std::string const& a_symbol,
     std::string const& a_instr,
     long               a_secid,
-    time_t             a_date,
+    time_val           a_date,
     std::string const& a_tz_name,
     int                a_tz_offset,
     uint8_t            a_depth,

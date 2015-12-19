@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
   std::string instr;
   std::string dtstr;
   std::string tz("Asia/Seoul");
-  time_t      date    = 0;
+  time_val    date;
   long        secid   = 0;
 
   bool        valid   = false;
@@ -132,7 +132,7 @@ int main(int argc, char* argv[])
         int y = stoi(dtstr.substr(0, 4));
         int m = stoi(dtstr.substr(4, 2));
         int d = stoi(dtstr.substr(6, 2));
-        date = utxx::time_val::universal_time(y, m, d, 0, 0, 0, 0).sec();
+        date = utxx::time_val::universal_time(y, m, d, 0, 0, 0, 0);
         continue;
       }
 
@@ -145,13 +145,13 @@ int main(int argc, char* argv[])
   if (xchg.empty())     Usage("Missing required option -e");
   if (symbol.empty())   Usage("Missing required option -s");
   if (instr.empty())    Usage("Missing required option -i");
-  if (date  == 0)       Usage("Missing required option -y");
+  if (!date)            Usage("Missing required option -y");
   if (secid == 0)       Usage("Missing required option -n");
 
   if (outdir.empty())   outdir = utxx::path::dirname(filename);
 
   struct tm lt = {0};
-  time_t     t = date;
+  time_t     t = date.sec();
 
   bool have_tz = !tz.empty();
 
@@ -225,11 +225,11 @@ int main(int argc, char* argv[])
     time_val now(msec / 1000, (msec % 1000) * 1000);
 
     if (!valid) {
-      time_t d = now.sec() - now.sec() % 86400;
+      time_val d = now - utxx::secs(now.sec() % 86400);
 
       if (d != date) {
         cerr << "Invalid date (expected: "
-             << utxx::timestamp::to_string(time_val(date, 0), utxx::DATE)
+             << utxx::timestamp::to_string(date, utxx::DATE)
              << ", got: "
              << utxx::timestamp::to_string(now, utxx::DATE) << '\n';
         exit(1);

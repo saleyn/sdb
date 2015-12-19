@@ -31,11 +31,11 @@ static std::string TempPath(const std::string& a_add_str = "") {
 
 BOOST_AUTO_TEST_CASE( test_secdb )
 {
-  auto    dir = TempPath();
-  std::string   file;
+  auto  dir = TempPath();
+  std::string file;
 
-  time_t date = utxx::time_val::universal_time(2015, 10, 15, 0, 0, 0, 0).sec();
-  auto   uuid = UUID("0f7f69c9-fc9d-4517-8318-706e3e58dadd");
+  auto date = utxx::time_val::universal_time(2015, 10, 15, 0, 0, 0, 0);
+  auto uuid = UUID("0f7f69c9-fc9d-4517-8318-706e3e58dadd");
   {
     BaseSecDBFileIO<10> sdb;
 
@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE( test_secdb )
     BaseSecDBFileIO<10> sdb;
     UTXX_CHECK_NO_THROW(sdb.Open(file));
 
-    BOOST_CHECK_EQUAL(date,            sdb.Info().Date());
+    BOOST_CHECK_EQUAL(date,            sdb.Info().Midnight());
     BOOST_CHECK_EQUAL(5,               sdb.Info().Depth());
     BOOST_CHECK_EQUAL(0.01,            sdb.Info().PxStep());
     BOOST_CHECK_EQUAL(100,             sdb.Info().PxScale());

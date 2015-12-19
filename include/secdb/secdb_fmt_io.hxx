@@ -45,11 +45,11 @@ Filename
   std::string const& a_sym,
   std::string const& a_instr,
   long               a_secid,
-  time_t             a_date
+  time_val           a_date
 )
 {
   int      y, m, d;
-  std::tie(y, m, d) = utxx::from_gregorian_time(a_date);
+  std::tie(y, m, d) = utxx::from_gregorian_time(a_date.sec());
 
   utxx::buffered_print name;
   char c = utxx::path::slash();
@@ -96,7 +96,7 @@ void BaseSecDBFileIO<MaxDepth>::Open
   std::string const& a_sym,
   std::string const& a_instr,
   long               a_secid,
-  time_t             a_date,
+  time_val           a_date,
   std::string const& a_tz_name,
   int                a_tz_offset,
   uint8_t            a_depth,
@@ -240,7 +240,7 @@ WriteHeader
   std::string const& a_symbol,
   std::string const& a_instr,
   long               a_secid,
-  time_t             a_date,
+  time_val           a_date,
   std::string const& a_tz_name,
   int                a_tz_offset,
   uint8_t            a_depth,

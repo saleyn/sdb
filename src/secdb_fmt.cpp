@@ -187,7 +187,7 @@ void Header::Set
   std::string const& a_symbol,
   std::string const& a_instr,
   long               a_secid,
-  time_t             a_date,
+  time_val           a_date,
   std::string const& a_tz_name,
   int                a_tz_offset,
   uint8_t            a_depth,
@@ -200,7 +200,7 @@ void Header::Set
   m_symbol         = a_symbol;
   m_instrument     = a_instr;
   m_secid          = a_secid;
-  m_date           = time_val(utxx::secs(a_date - (a_date % 86400)));
+  m_date           = a_date - utxx::secs(a_date.sec() % 86400);
   m_depth          = a_depth;
   m_px_step        = a_px_step;
   m_px_scale       = m_px_step  != 0.0 ? (int)(1.0 / m_px_step + 0.5) : 0;
