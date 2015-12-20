@@ -100,9 +100,9 @@ int main(int argc, char* argv[])
   set_terminate(&UnhandledException);
 
   std::string filename;
-  bool        quiet   = false;
-  int         debug   = 0;
-  bool        subdirs = false;
+  bool        quiet     = false;
+  int         debug     = 0;
+  bool        subdirs   = false;
   std::string outdir;
   std::string xchg;
   std::string symbol;

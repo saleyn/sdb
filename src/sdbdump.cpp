@@ -43,8 +43,13 @@ void Usage(std::string const& a_text = "")
        << "  -o|--output OutFile   - output filename (def: stdout)\n"
        << "  -d                    - enable debug printouts\n"
        << "  -q                    - quiet mode (don't display a progress bar)\n"
+       << "  -m|--max-depth Levels - limit max book depth to number of Levels\n"
        << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  --msec                - use millisecond time resolution (def usec)\n"
+       << "  --tz-local            - format time in the file's local time zone\n"
+       << "  -p|--px-only          - don't display quantity information\n"
        << "  -S|--symbol           - include symbol name in the output\n"
+       << "  -X|--xchg             - include exchange name in the output\n"
        << "  -I|--instr            - include instrument name in the output\n"
        << "  -Q|--quotes           - print quotes\n"
        << "  -T|--trades           - print trades\n"
@@ -71,16 +76,24 @@ struct Printer {
   Printer
   (
     SecDBFileIO& a_file, ostream& a_out, uint a_stream_mask,
-    bool a_fulldate, std::string const& a_symbol, std::string const& a_instr
+    utxx::stamp_type a_time_fmt, std::string const& a_xchg,
+    std::string const& a_symbol, std::string const& a_instr,
+    bool a_tz_local, int    a_max_depth = 100,    bool   a_px_only = false
   )
     : m_file(a_file), m_out(a_out), m_stream_mask(a_stream_mask)
-    , m_datefmt(a_fulldate ? utxx::DATE_TIME_WITH_USEC : utxx::TIME_WITH_USEC)
+    , m_datefmt(a_time_fmt)
+    , m_xchg(a_xchg)
     , m_symbol(a_symbol)
     , m_instr (a_instr)
+    , m_max_depth(a_max_depth)
+    , m_px_only(a_px_only)
+    , m_tz_local(a_tz_local)
   {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0)
-      m_out << "#Time|M|" << (m_symbol.empty() ? "Symbol|" : "")
-            << (m_instr.empty() ? "Insrument|" : "") << "Bids|Asks" << endl;
+      m_out << "#" << (m_tz_local ? "Local" : "UTC") << "Time|Q|"
+            << (m_xchg.empty()   ? "Xchg|" : "")
+            << (m_symbol.empty() ? "Symbol|" : "")
+            << (m_instr.empty()  ? "Insrument|" : "") << "Bids|Asks" << endl;
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0)
       m_out << "#Time|T|"  << (m_symbol.empty() ? "Symbol|" : "")
             << (m_instr.empty() ? "Insrument|" : "")
@@ -93,21 +106,30 @@ struct Printer {
 
   bool operator()(QuoteSample<SecDBFileIO::MAX_DEPTH(), int> const& a) {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
-      m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
-            << "|M|";
+      auto time = m_tz_local
+                ? (m_file.Time() + m_file.Info().TZOffset()) : m_file.Time();
+      m_out << utxx::timestamp::to_string(time, m_datefmt, m_tz_local)
+            << "|Q|";
+      if (!m_xchg.empty())   m_out << m_xchg   << '|';
       if (!m_symbol.empty()) m_out << m_symbol << '|';
       if (!m_instr.empty())  m_out << m_instr  << '|';
       int i = 0;
-      for (auto p = a.BestBid(), e = a.EndBid(); p != e; a.NextBid(p), ++i)
-        m_out << (i ? " " : "")
-              << std::setprecision(m_file.PxPrecision()) << std::fixed
-              << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
+      auto eb = a.EndBid();
+      auto ea = a.EndAsk();
+      for (auto p = a.BestBid(); p != eb && i < m_max_depth; a.NextBid(p), ++i) {
+        m_out << (i ? " " : "");
+        if (!m_px_only) m_out << p->m_qty << '@';
+        m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
+              << (m_file.PxStep() * p->m_px);
+      }
       m_out << '|';
       i = 0;
-      for (auto p = a.BestAsk(), e = a.EndAsk(); p != e; a.NextAsk(p), ++i)
-        m_out << (i ? " " : "")
-              << std::setprecision(m_file.PxPrecision()) << std::fixed
-              << p->m_qty << '@' << (m_file.PxStep() * p->m_px);
+      for (auto p = a.BestAsk(); p != ea && i < m_max_depth; a.NextAsk(p), ++i) {
+        m_out << (i ? " " : "");
+        if (!m_px_only) m_out << p->m_qty << '@';
+        m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
+              << (m_file.PxStep() * p->m_px);
+      }
       m_out << endl;
     }
     return true;
@@ -115,7 +137,9 @@ struct Printer {
 
   bool operator()(TradeSample const& a_trade) {
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0) {
-      m_out << utxx::timestamp::to_string(m_file.Time(), m_datefmt, true)
+      auto time = m_tz_local
+                ? (m_file.Time() + m_file.Info().TZOffset()) : m_file.Time();
+      m_out << utxx::timestamp::to_string(time, m_datefmt, m_tz_local)
             << "|T|";
       if (!m_symbol.empty()) m_out << m_symbol << '|';
       if (!m_instr.empty())  m_out << m_instr  << '|';
@@ -142,8 +166,12 @@ private:
   ostream&          m_out;
   uint              m_stream_mask;
   utxx::stamp_type  m_datefmt;
+  std::string       m_xchg;
   std::string       m_symbol;
   std::string       m_instr;
+  int               m_max_depth;
+  bool              m_px_only;
+  bool              m_tz_local;
 };
 
 //------------------------------------------------------------------------------
@@ -158,10 +186,15 @@ int main(int argc, char* argv[])
   std::string filename;
   bool        info        = false;
   bool        fulldate    = false;
+  bool        msec_time   = false;
   bool        quiet       = false;
   bool        with_symbol = false;
   bool        with_instr  = false;
+  bool        with_xchg   = false;
+  bool        px_only     = false;
+  bool        tz_local    = false;
   int         debug       = 0;
+  int         max_depth   = 100;
   std::string outfile;
   std::string sresol;
   int         resol       = 0;
@@ -174,12 +207,17 @@ int main(int argc, char* argv[])
   while  (opts.next()) {
       if (opts.match("-f", "",            &filename)) continue;
       if (opts.match("-i", "--info",          &info)) continue;
+      if (opts.match("-m", "--max-depth",&max_depth)) continue;
       if (opts.match("-d", "--debug"))  { debug++;    continue; }
       if (opts.match("-D", "--full-date", &fulldate)) continue;
       if (opts.match("-q", "--quiet",        &quiet)) continue;
+      if (opts.match("-p", "--px-only",    &px_only)) continue;
       if (opts.match("-o", "--output",     &outfile)) continue;
       if (opts.match("-S", "--symbol", &with_symbol)) continue;
+      if (opts.match("-X", "--xchg",     &with_xchg)) continue;
       if (opts.match("-I", "--instr",   &with_instr)) continue;
+      if (opts.match("", "--tz-local",    &tz_local)) continue;
+      if (opts.match("", "--msec",       &msec_time)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
         continue;
@@ -257,11 +295,18 @@ int main(int argc, char* argv[])
   } else if (resol)
     output.PrintCandles(out, resol);
   else {
+    auto date_fmt =  fulldate &&  msec_time ? utxx::DATE_TIME_WITH_MSEC
+                  :  fulldate && !msec_time ? utxx::DATE_TIME_WITH_USEC
+                  : !fulldate &&  msec_time ? utxx::TIME_WITH_MSEC
+                  : utxx::TIME_WITH_USEC;
+
     Printer printer
     (
-      output, out, stream_mask, fulldate,
-      with_symbol ? output.Info().Symbol() : "",
-      with_instr  ? output.Info().Instrument() : ""
+      output, out, stream_mask, date_fmt,
+      with_xchg   ? output.Info().Exchange()   : "",
+      with_symbol ? output.Info().Symbol()     : "",
+      with_instr  ? output.Info().Instrument() : "",
+      tz_local, max_depth, px_only
     );
     output.Read(printer);
   }

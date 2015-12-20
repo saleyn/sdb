@@ -1,4 +1,6 @@
+DIR:BUILD=/tmp/${USER}/@PROJECT@/build
+DIR:INSTALL=/opt/pkg/@PROJECT@/@VERSION@
 PKG_ROOT_DIR=/opt/pkg
 BOOST_ROOT=/opt/pkg/boost/current
-BOOST_LIBRARYDIR=/opt/pkg/boost/current/gcc/lib
+BOOST_LIBRARYDIR=/opt/pkg/boost/current/lib
 CMAKE_EXPORT_COMPILE_COMMANDS=ON

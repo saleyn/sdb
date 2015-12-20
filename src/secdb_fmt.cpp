@@ -110,7 +110,8 @@ int Header::Write(FILE* a_file, int a_debug)
 
   int  y;
   uint m, d;
-  std::tie(y, m, d) = utxx::from_gregorian_time(m_date.sec());
+  time_t sec = m_date.sec();
+  std::tie(y, m, d) = utxx::from_gregorian_time(sec);
 
   int rc = fprintf(a_file,
     "#!/usr/bin/env secdb\n"

@@ -130,7 +130,7 @@ message(STATUS "Utxx  found: ${Utxx_DIR}")
 # MAKE custom targets
 #-------------------------------------------------------------------------------
 
-add_definitions(-DBOOST_SYSTEM_NO_DEPRECATED)
+add_definitions(-DBOOST_SYSTEM_NO_DEPRECATED -Wno-unused-local-typedef)
 
 #-------------------------------------------------------------------------------
 # Configure files

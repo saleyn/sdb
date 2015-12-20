@@ -12,7 +12,7 @@ Build Type=Debug
 CMake Binary=file:///usr/bin/cmake
 Environment Profile=
 Extra Arguments=
-Install Directory=file:///home/serge/projects/secdb2/install
+Install Directory=file:///opt/pkg/secdb/0.1
 
 [CustomDefinesAndIncludes][ProjectPath0]
 Defines=\x00\x00\x00\x00
@@ -70,7 +70,7 @@ Name=sdbdump
 Type=Native Application
 
 [Launch][Launch Configuration 2][Data]
-Arguments=-f /tmp/20150626.KRX.KR4101.KR4101K90008.sdb -Q -T -q -D -C
+Arguments=-f /tmp/20151216.HS.EURUSD.EUR-USD.sdb -Q -T -q -D -p -m 1 -o /dev/stdout
 Dependencies=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x01\x00\x00\x00\x0b\x00\x00\x00\x00\x03\x00\x00\x00\n\x00s\x00e\x00c\x00d\x00b\x00\x00\x00\x06\x00s\x00r\x00c\x00\x00\x00\x0e\x00s\x00d\x00b\x00d\x00u\x00m\x00p)
 Dependency Action=Build
 EnvironmentGroup=
