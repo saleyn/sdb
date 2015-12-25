@@ -260,6 +260,7 @@ int main(int argc, char* argv[])
   // Create output stream
   //----------------------------------------------------------------------------
   ofstream out;
+  std::streambuf* coutbuf = nullptr;
 
   // If output file not given, use stdout
   if (!outfile.empty()) {
@@ -271,7 +272,8 @@ int main(int argc, char* argv[])
     out.open(outfile, std::ios_base::out | std::ios_base::trunc);
     if (!out.is_open())
       UTXX_THROW_IO_ERROR(errno, "Cannot create output file ", outfile);
-    std::cout.rdbuf(out.rdbuf());
+    coutbuf = cout.rdbuf();       // save old buf
+    std::cout.rdbuf(out.rdbuf()); // assign new buf
   }
 
   // Optionally show progress bar if quiet option is not set and we are not
@@ -287,31 +289,34 @@ int main(int argc, char* argv[])
   //----------------------------------------------------------------------------
   // Open SecDB file for reading
   //----------------------------------------------------------------------------
-  SecDBFileIO output(filename, debug);
+  {
+    SecDBFileIO output(filename, debug);
 
-  if (info) {
-    if (!debug)
-      output.Info().Print(std::cout);
-  } else if (resol)
-    output.PrintCandles(out, resol);
-  else {
-    auto date_fmt =  fulldate &&  msec_time ? utxx::DATE_TIME_WITH_MSEC
-                  :  fulldate && !msec_time ? utxx::DATE_TIME_WITH_USEC
-                  : !fulldate &&  msec_time ? utxx::TIME_WITH_MSEC
-                  : utxx::TIME_WITH_USEC;
+    if (info) {
+      if (!debug)
+        output.Info().Print(std::cout);
+    } else if (resol)
+      output.PrintCandles(out, resol);
+    else {
+      auto date_fmt =  fulldate &&  msec_time ? utxx::DATE_TIME_WITH_MSEC
+                    :  fulldate && !msec_time ? utxx::DATE_TIME_WITH_USEC
+                    : !fulldate &&  msec_time ? utxx::TIME_WITH_MSEC
+                    : utxx::TIME_WITH_USEC;
 
-    Printer printer
-    (
-      output, out, stream_mask, date_fmt,
-      with_xchg   ? output.Info().Exchange()   : "",
-      with_symbol ? output.Info().Symbol()     : "",
-      with_instr  ? output.Info().Instrument() : "",
-      tz_local, max_depth, px_only
-    );
-    output.Read(printer);
+      Printer printer
+      (
+        output, out, stream_mask, date_fmt,
+        with_xchg   ? output.Info().Exchange()   : "",
+        with_symbol ? output.Info().Symbol()     : "",
+        with_instr  ? output.Info().Instrument() : "",
+        tz_local, max_depth, px_only
+      );
+      output.Read(printer);
+    }
   }
 
-  output.Close();
+  if (coutbuf)
+    std::cout.rdbuf(coutbuf);  // restore old buf
 
   return 0;
 }
