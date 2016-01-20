@@ -4,13 +4,13 @@
 //------------------------------------------------------------------------------
 /// \brief SecDB file reader
 ///
-/// \see https://github.com/saleyn/secdb/wiki/Data-Format
+/// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
 // Copyright (c) 2015 Omnibius, LLC
 // Author:  Serge Aleynikov <saleyn@gmail.com>
 // Created: 2015-10-15
 //------------------------------------------------------------------------------
-#include <secdb/secdb.hpp>
+#include <sdb/sdb.hpp>
 #include <utxx/get_option.hpp>
 #include <utxx/path.hpp>
 #include <boost/algorithm/string/classification.hpp>
@@ -20,7 +20,7 @@
 #include <fstream>
 
 using namespace std;
-using namespace secdb;
+using namespace sdb;
 
 using SecDBFileIO = BaseSecDBFileIO<10>;
 

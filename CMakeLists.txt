@@ -51,7 +51,7 @@ message(STATUS "Configuring for the "
                "${BoldMagenta}${CMAKE_BUILD_TYPE}${ClrReset} build")
 
 if(CMAKE_BUILD_TYPE STREQUAL "debug")
-    set(lib_suffix "_d")
+    set(LIB_SUFFIX "_d")
 endif()
 
 #-------------------------------------------------------------------------------

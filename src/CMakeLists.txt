@@ -1,7 +1,7 @@
 # vim:ts=2:sw=2:et
 
 # This must be AFTER link_directories
-add_executable(sdb-krx secdb_krx_fmt.cpp)
+add_executable(sdb-krx sdb_krx_fmt.cpp)
 add_executable(sdbdump sdbdump.cpp)
 
 target_link_libraries(
@@ -20,7 +20,7 @@ target_link_libraries(
 
 # The SecDB library:
 list(APPEND SECDB_LIB_SRCS
-  secdb_fmt.cpp
+  sdb_fmt.cpp
 )
 
 add_library(sdb SHARED ${SECDB_LIB_SRCS})
@@ -31,10 +31,10 @@ set_target_properties(
   RELEASE_POSTFIX ""
 )
 
-#set_target_properties(secdb-bin PROPERTIES OUTPUT_NAME sdb)
+#set_target_properties(sdb-bin PROPERTIES OUTPUT_NAME sdb)
 
 # SET_TARGET_PROPERTIES(
-#     sdb PROPERTIES OUTPUT_NAME secdb
+#     sdb PROPERTIES OUTPUT_NAME sdb
 #     DEBUG_POSTFIX   "_${TOOLCHAIN}_d"
 #     RELEASE_POSTFIX "_${TOOLCHAIN}"
 # )
