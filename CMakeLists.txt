@@ -46,7 +46,9 @@ else()
     message(FATAL_ERROR "Invalid toolchain: ${TOOLCHAIN}")
 endif()
 
-message(STATUS "Configuring for the ${TOOLCHAIN} toolchain")
+message(STATUS "Configuring for the "
+               "${BoldMagenta}${TOOLCHAIN}${ClrReset} toolchain "
+               "${BoldMagenta}${CMAKE_BUILD_TYPE}${ClrReset} build")
 
 if(CMAKE_BUILD_TYPE STREQUAL "debug")
     set(lib_suffix "_d")
