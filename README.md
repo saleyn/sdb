@@ -7,7 +7,7 @@ The format is documented here: https://github.com/saleyn/sdb/wiki/Data-Format
 The SDB tools include:
 
 * `sdb-krx` - convert KRX market data from text to `sdb` data format
-* `sdb` - print the content of `sdb` database file
+* `sdb`     - print the content of `sdb` database file
 
 ## Author ##
 
