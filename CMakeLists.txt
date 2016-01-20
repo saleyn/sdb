@@ -13,6 +13,9 @@ if(VERBOSE)
     set(CMAKE_VERBOSE_MAKEFILE ON)
 endif()
 
+string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE)
+string(TOLOWER "${TOOLCHAIN}"        TOOLCHAIN)
+
 #-------------------------------------------------------------------------------
 # Toolchain
 #-------------------------------------------------------------------------------
@@ -23,24 +26,19 @@ if(TOOLCHAIN STREQUAL "gcc")
     add_definitions(-Wno-unused-local-typedefs -Wno-strict-aliasing -fopenmp
                     -std=c++1y)
 
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_BUILD_TYPE STREQUAL "release")
         add_definitions(-flto -funroll-loops -fomit-frame-pointer)
 
         # The following will omit all symbol information from the build:
         #add_definitions(-Wl,-s)
         #set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -s")
     endif()
-
-    #if ("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
-    #    add_definitions(-flto -funroll-loops -fomit-frame-pointer -Wl,-s)
-    #    set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -s")
-    #endif()
-elseif(TOOLCHAIN STREQUAL "intel")
+elseif(TOOLCHAIN STREQUAL  "intel")
     set(CMAKE_C_COMPILER   "icc")
     set(CMAKE_CXX_COMPILER "icpc")
     add_definitions(-openmp)
 
-elseif(TOOLCHAIN STREQUAL "clang")
+elseif(TOOLCHAIN STREQUAL  "clang")
     set(CMAKE_C_COMPILER   "clang")
     set(CMAKE_CXX_COMPILER "clang++")
     add_definitions(-std=c++1y)
@@ -50,7 +48,7 @@ endif()
 
 message(STATUS "Configuring for the ${TOOLCHAIN} toolchain")
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(CMAKE_BUILD_TYPE STREQUAL "debug")
     set(lib_suffix "_d")
 endif()
 
