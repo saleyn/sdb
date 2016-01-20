@@ -31,7 +31,7 @@ set_target_properties(
   RELEASE_POSTFIX ""
 )
 
-#set_target_properties(secdb-bin PROPERTIES OUTPUT_NAME secdb)
+#set_target_properties(secdb-bin PROPERTIES OUTPUT_NAME sdb)
 
 # SET_TARGET_PROPERTIES(
 #     sdb PROPERTIES OUTPUT_NAME secdb

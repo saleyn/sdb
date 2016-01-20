@@ -1,6 +1,6 @@
 # vim:ts=4:sw=4:et
 cmake_minimum_required(VERSION 3.0)
-project(secdb VERSION 0.1)
+project(sdb VERSION 0.1)
 
 #-------------------------------------------------------------------------------
 # CMAKE options customization

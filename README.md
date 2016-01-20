@@ -1,13 +1,13 @@
-# SecDB - database for storing streaming market data #
+# SDB - database for storing streaming market data #
 
 Data storage format and supporting Linux tools for financial market data.
 It's designed to represent snapshots of the multi-level order book and trades.
 The format is documented here: https://github.com/saleyn/secdb/wiki/Data-Format
 
-The SecDB tools include:
+The SDB tools include:
 
-* `secdb-krx` - convert KRX market data from text to `sdb` data format
-* `secdb` - print the content of `sdb` database file
+* `sdb-krx` - convert KRX market data from text to `sdb` data format
+* `sdb` - print the content of `sdb` database file
 
 ## Author ##
 
@@ -20,8 +20,8 @@ Dependencies:
 * `utxx` found here: https://github.com/saleyn/utxx.git
 
 ```
-git clone https://github.com/saleyn/secdb.git
-cd secdb
+git clone https://gitlab.com/saleyn/sdb.git
+cd sdb
 make bootstrap [prefix=/install/path]
 make
 make install
