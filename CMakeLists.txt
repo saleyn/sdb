@@ -5,7 +5,7 @@ project(sdb VERSION 0.1)
 #-------------------------------------------------------------------------------
 # CMAKE options customization
 #-------------------------------------------------------------------------------
-option(WITH_THRIFT          "Enable when UTXX was compiled with Thrift"  ON)
+option(WITH_THRIFT          "Enable when UTXX was compiled with Thrift"  OFF)
 option(VERBOSE              "Turn verbosity on|off"                      OFF)
 #set(DEBUG "vars")
 
@@ -81,7 +81,7 @@ find_package(PkgConfig)
 # the cache with no FORCE
 set(PKG_ROOT_DIR "$ENV{PKG_ROOT_DIR}" CACHE PATH "Package root directory")
 if (NOT PKG_ROOT_DIR)
-    set(PKG_ROOT_DIR "/opt/pkg" CACHE PATH "Package root directory")
+    set(PKG_ROOT_DIR "/opt/pkg" CACHE PATH "Package root directory" FORCE)
 endif()
 
 set(Utxx_DIR             "${PKG_ROOT_DIR}/utxx/current")
