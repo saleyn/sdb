@@ -20,7 +20,7 @@ Dependencies:
 * `utxx` found here: https://github.com/saleyn/utxx.git
 
 ```
-git clone https://gitlab.com/saleyn/sdb.git
+git clone https://github.com/saleyn/sdb.git
 cd sdb
 make bootstrap [prefix=/install/path]
 make
