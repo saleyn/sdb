@@ -36,8 +36,8 @@ Rights granted by a commercial license:
 
 Specifically:
 
-* If you include SecDB with an application that is not licensed under the AGPL or
-  GPL-compatible license, you need a commercial license for using SecDB.
+* If you include SDB with an application that is not licensed under the AGPL or
+  GPL-compatible license, you need a commercial license for using SDB.
 * If you develop and distribute a commercial application and as part of utilizing your
-  application, the end-user must download a copy of SecDB; for each derivative work, you
-  (or, in some cases, your end-user) need a commercial license of SecDB.
+  application, the end-user must download a copy of SDB; for each derivative work, you
+  (or, in some cases, your end-user) need a commercial license of SDB.
