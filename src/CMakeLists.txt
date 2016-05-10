@@ -56,10 +56,6 @@ if (${CMAKE_BUILD_TYPE} STREQUAL "release")
     FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.so
     DESTINATION lib
   )
-  install(
-    FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.a
-    DESTINATION lib
-  )
 endif()
 
 
