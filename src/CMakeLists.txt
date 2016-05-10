@@ -49,10 +49,6 @@ install(TARGETS sdb-krx RUNTIME DESTINATION bin)
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "release")
   install(
-    FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.so.${PROJECT_VERSION}
-    DESTINATION lib
-  )
-  install(
     FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.so
     DESTINATION lib
   )
