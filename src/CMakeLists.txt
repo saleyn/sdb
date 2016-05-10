@@ -42,3 +42,24 @@ set_target_properties(
 install(TARGETS sdb     LIBRARY DESTINATION lib)
 install(TARGETS sdbdump RUNTIME DESTINATION bin)
 install(TARGETS sdb-krx RUNTIME DESTINATION bin)
+
+# In the install below we split library installation in a separate library clause
+# so that it's possible to build/install both Release and Debug versions of the
+# library and then include that into a package
+
+if (${CMAKE_BUILD_TYPE} STREQUAL "release")
+  install(
+    FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.so.${PROJECT_VERSION}
+    DESTINATION lib
+  )
+  install(
+    FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.so
+    DESTINATION lib
+  )
+  install(
+    FILES ${CMAKE_BINARY_DIR}/src/lib${PROJECT_NAME}_d.a
+    DESTINATION lib
+  )
+endif()
+
+

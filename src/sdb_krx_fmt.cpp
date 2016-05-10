@@ -12,6 +12,7 @@
 //------------------------------------------------------------------------------
 #include <sdb/sdb.hpp>
 #include <utxx/get_option.hpp>
+#include <utxx/error.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/progress.hpp>
@@ -142,7 +143,7 @@ int main(int argc, char* argv[])
   }
 
   if (filename.empty()) Usage("Missing required option -f");
-  if (xchg.empty())     Usage("Missing required option -e");
+  if (xchg.empty())     Usage("Missing required option -x");
   if (symbol.empty())   Usage("Missing required option -s");
   if (instr.empty())    Usage("Missing required option -i");
   if (!date)            Usage("Missing required option -y");
@@ -227,11 +228,11 @@ int main(int argc, char* argv[])
     if (!valid) {
       time_val d = now - utxx::secs(now.sec() % 86400);
 
-      if (d != date) {
+      if (d.sec() != date.sec()) {
         cerr << "Invalid date (expected: "
-             << utxx::timestamp::to_string(date, utxx::DATE)
+             << utxx::timestamp::to_string(date, utxx::DATE_TIME)
              << ", got: "
-             << utxx::timestamp::to_string(now, utxx::DATE) << '\n';
+             << utxx::timestamp::to_string(now,  utxx::DATE_TIME) << ")\n";
         exit(1);
       }
 
