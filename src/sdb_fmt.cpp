@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdb_fmt.hpp
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SDB file format reader/writer
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -43,7 +43,7 @@ int Header::Read(FILE* a_file, size_t a_file_size)
       (std::string("Cannot rewind to beginning of file header: ") +
        strerror(errno));
 
-  // For some reason fscanf doesn't parse the string that ends with ")\n"
+  // NB: For some reason fscanf doesn't parse the string that ends with ")\n"
   // correctly, so we exclude the ')' in the time zone name ('utc-date')
   // and remove it by hand later:
   int n = fscanf(a_file,
@@ -61,7 +61,7 @@ int Header::Read(FILE* a_file, size_t a_file_size)
     &m_secid,   &m_depth,   &m_px_step, uuid);
 
   if (n != 13)
-    throw std::runtime_error("Invalid SecDB header!");
+    throw std::runtime_error("Invalid SDB header!");
 
   n = ftell(a_file);
 
@@ -74,7 +74,7 @@ int Header::Read(FILE* a_file, size_t a_file_size)
   int tzlen    = strlen(tznm);
   if (strlen(tz) != 5 || tzlen < 3 || tznm[tzlen-1] != ')')
     throw std::runtime_error
-      (std::string("SecDB header - invalid timezone format: ") + tz);
+      (std::string("SDB header - invalid timezone format: ") + tz);
 
   utxx::fast_atoi(tz+1, tz+3, tz_hh);
   utxx::fast_atoi(tz+3, tz+5, tz_mm);
@@ -89,7 +89,7 @@ int Header::Read(FILE* a_file, size_t a_file_size)
   while (true) {
     if ((n = fgetc(a_file)) < 0)
       throw std::runtime_error
-        (std::string("Error reading SecDB header: ")+ strerror(errno));
+        (std::string("Error reading SDB header: ")+ strerror(errno));
     if (n != '\n')
       eol = false;
     else if (eol)
@@ -151,18 +151,18 @@ std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
   utxx::timestamp::write_date(buf, m_date.sec(), true, 10, '-');
 
   return out
-    << a_ident << "Version....: " << m_version      << '\n'
-    << a_ident << "Date.......: " << buf << " UTC (" << TZ() << ")\n"
-    << a_ident << "Exchange...: " << m_exchange     << '\n'
-    << a_ident << "Symbol.....: " << m_symbol       << '\n'
-    << a_ident << "Instrument.: " << m_instrument   << '\n'
-    << a_ident << "SecID......: " << m_secid        << '\n'
-    << a_ident << "Depth......: " << m_depth        << '\n'
+    << a_ident << "Version....: " << m_version       << '\n'
+    << a_ident << "Date.......: " << buf << " UTC (" << TZ() << TZName() << ")\n"
+    << a_ident << "Exchange...: " << m_exchange      << '\n'
+    << a_ident << "Symbol.....: " << m_symbol        << '\n'
+    << a_ident << "Instrument.: " << m_instrument    << '\n'
+    << a_ident << "SecID......: " << m_secid         << '\n'
+    << a_ident << "Depth......: " << m_depth         << '\n'
     << a_ident << "PxStep.....: " << std::fixed
                                   << std::setprecision(m_px_precision)
-                                  << m_px_step      << '\n'
-    << a_ident << "PxPrecision: " << m_px_precision << '\n'
-    << a_ident << "PxScale....: " << m_px_scale     << '\n'
+                                  << m_px_step       << '\n'
+    << a_ident << "PxPrecision: " << m_px_precision  << '\n'
+    << a_ident << "PxScale....: " << m_px_scale      << '\n'
     << a_ident << "UUID.......: " << boost::uuids::to_string(m_uuid) << '\n';
 }
 

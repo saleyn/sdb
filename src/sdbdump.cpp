@@ -34,7 +34,7 @@ void Usage(std::string const& a_text = "")
   if (!a_text.empty())
     cout << a_text << endl << endl;
 
-  cout << "SecDB file reader\n"
+  cout << "SDB file reader\n"
        << "Copyright (c) 2015 Omnibius, LLC\n\n"
        << "Usage: " << utxx::path::program::name()
        << " -f MDFilename [-o|-O OutputFile] [-d] [-q]\n"
@@ -47,6 +47,7 @@ void Usage(std::string const& a_text = "")
        << "  -D                    - include YYYYMMDD in timestamp output\n"
        << "  --msec                - use millisecond time resolution (def usec)\n"
        << "  --tz-local            - format time in the file's local time zone\n"
+       << "  --tz-utc              - format time in the UTC time zone (default)\n"
        << "  -p|--px-only          - don't display quantity information\n"
        << "  -S|--symbol           - include symbol name in the output\n"
        << "  -X|--xchg             - include exchange name in the output\n"
@@ -90,13 +91,14 @@ struct Printer {
     , m_tz_local(a_tz_local)
   {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0)
-      m_out << "#" << (m_tz_local ? "Local" : "UTC") << "Time|Q|"
-            << (m_xchg.empty()   ? "Xchg|" : "")
-            << (m_symbol.empty() ? "Symbol|" : "")
-            << (m_instr.empty()  ? "Insrument|" : "") << "Bids|Asks" << endl;
+      m_out << "#" << (m_tz_local ? "Local"      : "UTC") << "Time|Q|"
+            << (m_xchg.empty()    ? "Xchg|"      : "")
+            << (m_symbol.empty()  ? "Symbol|"    : "")
+            << (m_instr.empty()   ? "Insrument|" : "")    << "Bids|Asks" << endl;
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0)
-      m_out << "#Time|T|"  << (m_symbol.empty() ? "Symbol|" : "")
-            << (m_instr.empty() ? "Insrument|" : "")
+      m_out << '#' << (m_tz_local ? "Local"      : "UTC") << "Time|T|"
+            << (m_symbol.empty() ? "Symbol|"     : "")
+            << (m_instr.empty()  ? "Insrument|"  : "")
             << "Side|Price|Qty|TradeID|OrderID" << endl;
   }
 
@@ -108,7 +110,7 @@ struct Printer {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
       auto time = m_tz_local
                 ? (m_file.Time() + m_file.Info().TZOffset()) : m_file.Time();
-      m_out << utxx::timestamp::to_string(time, m_datefmt, m_tz_local)
+      m_out << utxx::timestamp::to_string(time, m_datefmt, true)
             << "|Q|";
       if (!m_xchg.empty())   m_out << m_xchg   << '|';
       if (!m_symbol.empty()) m_out << m_symbol << '|';
@@ -208,7 +210,7 @@ int main(int argc, char* argv[])
       if (opts.match("-f", "",            &filename)) continue;
       if (opts.match("-i", "--info",          &info)) continue;
       if (opts.match("-m", "--max-depth",&max_depth)) continue;
-      if (opts.match("-d", "--debug"))  { debug++;    continue; }
+      if (opts.match("-d", "--debug"))   { debug++;   continue; }
       if (opts.match("-D", "--full-date", &fulldate)) continue;
       if (opts.match("-q", "--quiet",        &quiet)) continue;
       if (opts.match("-p", "--px-only",    &px_only)) continue;
@@ -217,6 +219,7 @@ int main(int argc, char* argv[])
       if (opts.match("-X", "--xchg",     &with_xchg)) continue;
       if (opts.match("-I", "--instr",   &with_instr)) continue;
       if (opts.match("", "--tz-local",    &tz_local)) continue;
+      if (opts.match("", "--tz-utc"))   { tz_local=0; continue; }
       if (opts.match("", "--msec",       &msec_time)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
@@ -287,7 +290,7 @@ int main(int argc, char* argv[])
   }
 
   //----------------------------------------------------------------------------
-  // Open SecDB file for reading
+  // Open SDB file for reading
   //----------------------------------------------------------------------------
   {
     SecDBFileIO output(filename, debug);
