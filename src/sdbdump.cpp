@@ -266,7 +266,7 @@ int main(int argc, char* argv[])
   std::streambuf* coutbuf = nullptr;
 
   // If output file not given, use stdout
-  if (!outfile.empty()) {
+  if (!outfile.empty() && outfile != "-") {
     auto dir = utxx::path::dirname(outfile);
     try   { boost::filesystem::create_directories(dir); }
     catch ( std::exception const& e ) {
@@ -308,7 +308,7 @@ int main(int argc, char* argv[])
 
       Printer printer
       (
-        output, out, stream_mask, date_fmt,
+        output, cout, stream_mask, date_fmt,
         with_xchg   ? output.Info().Exchange()   : "",
         with_symbol ? output.Info().Symbol()     : "",
         with_instr  ? output.Info().Instrument() : "",
