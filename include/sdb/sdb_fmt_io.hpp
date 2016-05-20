@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdb_fmt_io.h
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SDB file format reader/writer
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -26,21 +26,21 @@
 namespace sdb {
 
 //------------------------------------------------------------------------------
-/// SecDB file read/write I/O operations handler
+/// SDB file read/write I/O operations handler
 //------------------------------------------------------------------------------
 template <uint MaxDepth = 10>
-struct BaseSecDBFileIO {
+struct BaseSDBFileIO {
 
   //----------------------------------------------------------------------------
   // Public API
   //----------------------------------------------------------------------------
 
-  BaseSecDBFileIO()  { static_assert(MaxDepth < 128, "MaxDepth is too large"); }
+  BaseSDBFileIO()  { static_assert(MaxDepth < 128, "MaxDepth is too large"); }
 
   /// Open \a a_filename for reading
-  BaseSecDBFileIO(std::string const& a_file, int a_debug = 0);
+  BaseSDBFileIO(std::string const& a_file, int a_debug = 0);
 
-  ~BaseSecDBFileIO() { Close(); }
+  ~BaseSDBFileIO() { Close(); }
 
   static constexpr uint MAX_DEPTH()       { return MaxDepth;              }
 
@@ -80,9 +80,9 @@ struct BaseSecDBFileIO {
   );
 
   /// Open file for reading or writing
-  /// @param a_path      base directory of SecDB database
+  /// @param a_path      base directory of SDB database
   /// @param a_deep_dir  when true the output file is created inside a nested
-  ///                    directory tree as specified by the SecDB file naming
+  ///                    directory tree as specified by the SDB file naming
   ///                    convention.  Otherwise the \a a_path dir is used.
   /// @param a_xchg      exchange name
   /// @param a_symbol    company-specific security name
@@ -207,6 +207,7 @@ private:
   FILE*       m_file          = nullptr;
   OpenMode    m_mode          = OpenMode::Read;
   int         m_debug         = 0;
+  bool        m_existing      = false; ///< True when opened existing file
   std::string m_filename;
   Header      m_header;
   time_val    m_last_ts;            ///< Last timestmap written
@@ -238,5 +239,3 @@ private:
 };
 
 } // namespace sdb
-
-#include <sdb/sdb_fmt_io.hxx> // Include implementation

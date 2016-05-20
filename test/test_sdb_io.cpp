@@ -3,7 +3,7 @@
 /// @file   test_sdb_io.cpp
 /// @author Serge Aleynikov
 //------------------------------------------------------------------------------
-/// @brief Test module for SecDB file I/O.
+/// @brief Test module for SDB file I/O.
 //------------------------------------------------------------------------------
 // Copyright (c) 2015 Omnibius, LLC
 // Created:  2015-10-05
@@ -37,7 +37,7 @@ BOOST_AUTO_TEST_CASE( test_sdb )
   auto date = utxx::time_val::universal_time(2015, 10, 15, 0, 0, 0, 0);
   auto uuid = UUID("0f7f69c9-fc9d-4517-8318-706e3e58dadd");
   {
-    BaseSecDBFileIO<10> sdb;
+    BaseSDBFileIO<10> sdb;
 
     utxx::path::file_unlink
       (sdb.Filename(dir,false,"KRX","KR4101","KR4101K60008",1,date));
@@ -54,7 +54,7 @@ BOOST_AUTO_TEST_CASE( test_sdb )
   }
 
   {
-    BaseSecDBFileIO<10> sdb;
+    BaseSDBFileIO<10> sdb;
     UTXX_CHECK_NO_THROW(sdb.Open(file));
 
     BOOST_CHECK_EQUAL(date,            sdb.Info().Midnight());

@@ -5,7 +5,7 @@ includedir=@CMAKE_INSTALL_PREFIX@/include
 libsuffix=@LIB_SUFFIX@
 
 Name: @PROJECT_NAME@
-Description: SecDB C++ Library.
+Description: SDB C++ Library.
 Requires: utxx
 Version: @PROJECT_VERSION@
 Libs: -L${libdir} -lsdb${libsuffix}

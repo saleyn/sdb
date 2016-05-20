@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdb_fmt_io.hxx
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SDB file format reader/writer
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -22,21 +22,20 @@
 #include <utxx/endian.hpp>
 #include <utxx/scope_exit.hpp>
 #include <utxx/buffer.hpp>
-#include <boost/filesystem.hpp>
 #include <sys/stat.h>
 #include <fcntl.h>
 
 namespace sdb {
 
 //==============================================================================
-// BaseSecDBFileIO
+// BaseSDBFileIO
 //==============================================================================
 
 //------------------------------------------------------------------------------
-// Open SecDB database file
+// Open SDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-std::string BaseSecDBFileIO<MaxDepth>::
+std::string BaseSDBFileIO<MaxDepth>::
 Filename
 (
   std::string const& a_dir,
@@ -76,11 +75,11 @@ Filename
 }
 
 //------------------------------------------------------------------------------
-// Open SecDB database file
+// Open SDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-inline BaseSecDBFileIO<MaxDepth>::
-BaseSecDBFileIO(std::string const& a_name, int a_debug)
+inline BaseSDBFileIO<MaxDepth>::
+BaseSDBFileIO(std::string const& a_name, int a_debug)
 {
   Open(a_name, a_debug);
 }
@@ -88,7 +87,7 @@ BaseSecDBFileIO(std::string const& a_name, int a_debug)
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <OpenMode Mode>
-void BaseSecDBFileIO<MaxDepth>::Open
+void BaseSDBFileIO<MaxDepth>::Open
 (
   std::string const& a_path,
   bool               a_deep_dir,
@@ -107,8 +106,43 @@ void BaseSecDBFileIO<MaxDepth>::Open
 {
   auto name = Filename(a_path, a_deep_dir, a_xchg, a_sym, a_instr, a_secid, a_date);
   auto size = DoOpen<Mode>(name.c_str(), a_perm);
+  auto hdr  = size >= Header::MIN_FILE_SIZE();
 
-  if (Mode == OpenMode::Write && size < Header::MIN_FILE_SIZE()) {
+  if (hdr && Mode == OpenMode::Append) {
+    try   { m_header.Read(m_file, size); }
+    catch ( std::exception const& e ) {
+      ftruncate(fileno(m_file), 0);
+      hdr = false;
+    }
+
+    if (hdr) {
+      if (m_header.Date() != a_date.sec())
+        UTXX_THROW_RUNTIME_ERROR
+          ("Date of existing file '", name, "' (",
+            utxx::timestamp::to_string(utxx::time_val(utxx::secs(m_header.Date())),
+                                      utxx::DATE, true),
+            ") doesn't match ",
+            utxx::timestamp::to_string(a_date, utxx::DATE, true));
+
+      if (a_xchg != m_header.Exchange())
+        UTXX_THROW_RUNTIME_ERROR("Exchange of file '", name, "' (",
+                                  m_header.Exchange(), ") doesn't match '",
+                                  a_xchg, "'");
+      if (a_sym != m_header.Symbol())
+        UTXX_THROW_RUNTIME_ERROR("Symbol of file '", name, "' (",
+                                  m_header.Symbol(), ") doesn't match '",
+                                  a_sym, "'");
+      if (a_instr != m_header.Instrument())
+        UTXX_THROW_RUNTIME_ERROR("Instrument of file '", name, "' (",
+                                  m_header.Instrument(), ") doesn't match '",
+                                  a_instr, "'");
+      // Read all samples till the end of the file
+      auto dummy = [](auto& sample) {};
+      Read(dummy);
+    }
+  }
+
+  if ((Mode == OpenMode::Write || Mode == OpenMode::Append) && !hdr) {
     try {
       WriteHeader(a_xchg,  a_sym,     a_instr, a_secid,
                   a_date,  a_tz_name, a_tz_offset,
@@ -122,10 +156,10 @@ void BaseSecDBFileIO<MaxDepth>::Open
 }
 
 //------------------------------------------------------------------------------
-// Open SecDB database file
+// Open SDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-inline void BaseSecDBFileIO<MaxDepth>::
+inline void BaseSDBFileIO<MaxDepth>::
 Open(std::string const& a_name, int a_debug)
 {
   m_debug  = a_debug;
@@ -144,7 +178,7 @@ Open(std::string const& a_name, int a_debug)
 
   if (m_header.Version() != VERSION())
     UTXX_THROW_RUNTIME_ERROR
-      ("SecDB version ", m_header.Version(), " not supported (expected: ",
+      ("SDB version ", m_header.Version(), " not supported (expected: ",
        VERSION(), ')');
 
   m_streams_meta.Read(m_file);
@@ -152,24 +186,26 @@ Open(std::string const& a_name, int a_debug)
 
   if (a_debug)
     PrintCandles(std::cerr);
+
+  m_existing = true;
 }
 
 //------------------------------------------------------------------------------
-// Open SecDB database file
+// Open SDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <OpenMode Mode>
-size_t BaseSecDBFileIO<MaxDepth>::
+size_t BaseSDBFileIO<MaxDepth>::
 DoOpen(std::string const& a_name, int a_perm)
 {
   auto name = a_name; //boost::to_upper_copy(a_name);
   auto dir  = utxx::path::dirname(name);
-  try   { boost::filesystem::create_directories(dir); }
-  catch ( std::exception const& e ) {
+  if (!utxx::path::create_directories(dir))
     UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
-  }
 
-  auto mode = Mode == OpenMode::Read ? O_RDONLY : O_RDWR|O_CREAT|O_TRUNC;
+  auto mode = Mode == OpenMode::Read  ? O_RDONLY :
+              Mode == OpenMode::Write ? O_RDWR|O_CREAT|O_TRUNC
+                                      : O_RDWR;
   int  fd   = ::open(name.c_str(), mode, a_perm);
 
   if  (fd < 0)
@@ -184,21 +220,28 @@ DoOpen(std::string const& a_name, int a_perm)
 
   if  (Mode == OpenMode::Read && sz < Header::MIN_FILE_SIZE())
     UTXX_THROW_RUNTIME_ERROR
-      ("SecDB file ", name.c_str(), " has invalid size ", sz);
+      ("SDB file ", name.c_str(), " has invalid size ", sz);
 
   se.disable();
 
-  m_filename = name;
-  m_mode     = Mode;
-  m_file     = fdopen(fd, Mode == OpenMode::Read ? "r" : "w+");
+  m_filename    = name;
+  m_mode        = Mode;
+  m_file        = fdopen(fd, Mode == OpenMode::Read ? "r" : "w+");
+  m_existing    = false;
+  m_last_sec    = 0;
+  m_last_usec   = 0;
+  m_next_second = 0;
+  m_last_ts.clear();
+  m_last_quote_px = NaN();
+  m_last_trade_px = NaN();
   return sz;
 }
 
 //------------------------------------------------------------------------------
-// Close SecDB database file
+// Close SDB database file
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 Close()
 {
   if (!m_file) return;
@@ -223,7 +266,7 @@ Close()
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-int BaseSecDBFileIO<MaxDepth>::
+int BaseSDBFileIO<MaxDepth>::
 ReadHeader()
 {
   assert(m_file);
@@ -233,7 +276,7 @@ ReadHeader()
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-int BaseSecDBFileIO<MaxDepth>::
+int BaseSDBFileIO<MaxDepth>::
 WriteHeader
 (
   std::string const& a_xchg,
@@ -255,7 +298,7 @@ WriteHeader
   auto   sz = utxx::path::file_size(fileno(m_file));
   if (sz > 0)
     UTXX_THROW_RUNTIME_ERROR
-      ("Cannot write SecDB header to non-empty file ", m_filename);
+      ("Cannot write SDB header to non-empty file ", m_filename);
 
   m_header.Set(VERSION(), a_xchg,    a_symbol,    a_instr,  a_secid,
                a_date,    a_tz_name, a_tz_offset, a_depth,  a_px_step, a_uuid);
@@ -272,7 +315,7 @@ WriteHeader
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 WriteStreamsMeta(std::vector<StreamType>&& a_types)
 {
   if (m_written_state != WriteStateT::WrHeader)
@@ -301,7 +344,7 @@ WriteStreamsMeta(std::vector<StreamType>&& a_types)
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 WriteCandlesMeta(CandlesMeta&& a_meta)
 {
   if (m_written_state != WriteStateT::WrStreamsMeta)
@@ -336,7 +379,7 @@ WriteCandlesMeta(CandlesMeta&& a_meta)
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-bool BaseSecDBFileIO<MaxDepth>::
+bool BaseSDBFileIO<MaxDepth>::
 WriteSeconds(time_val a_now)
 {
   auto midnight_ns = a_now - Midnight();
@@ -366,7 +409,7 @@ WriteSeconds(time_val a_now)
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <PriceUnit PU, typename T>
-int BaseSecDBFileIO<MaxDepth>::
+int BaseSDBFileIO<MaxDepth>::
 NormalizePx(T a_px)
 {
   return PU == PriceUnit::DoubleVal
@@ -382,7 +425,7 @@ NormalizePx(T a_px)
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <PriceUnit PU, typename PxT>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 WriteQuotes
 (
   time_val a_ts,
@@ -477,7 +520,7 @@ WriteQuotes
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <PriceUnit PU, typename PxT>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 WriteTrade
 (
   time_val  a_ts,
@@ -522,7 +565,7 @@ WriteTrade
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 UpdateCandles(int a_ts, PriceT a_px, int a_qty)
 {
   m_candles_meta.UpdateCandles(a_ts, a_px, a_qty);
@@ -530,7 +573,7 @@ UpdateCandles(int a_ts, PriceT a_px, int a_qty)
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty)
 {
   m_candles_meta.AddCandleVolumes(a_ts, a_buy_qty, a_sell_qty);
@@ -538,7 +581,7 @@ AddCandleVolumes(int a_ts, int a_buy_qty, int a_sell_qty)
 
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 PrintCandles(std::ostream& out, int a_resolution) const
 {
   if (m_debug)
@@ -595,7 +638,7 @@ PrintCandles(std::ostream& out, int a_resolution) const
 //------------------------------------------------------------------------------
 template <uint MaxDepth>
 template <typename OnSample>
-void BaseSecDBFileIO<MaxDepth>::
+void BaseSDBFileIO<MaxDepth>::
 Read(OnSample a_fun)
 {
   if (fseek(m_file, m_streams_meta.DataOffset(), SEEK_SET) < 0)
@@ -648,6 +691,7 @@ Read(OnSample a_fun)
             m_next_second   = m_last_sec + 1;
             m_last_quote_px = NaN();
             m_last_trade_px = NaN();
+            a_fun(ss);
           }
           break;
         }

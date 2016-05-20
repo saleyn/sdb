@@ -18,7 +18,7 @@ target_link_libraries(
   sdb
 )
 
-# The SecDB library:
+# The SDB library:
 list(APPEND SECDB_LIB_SRCS
   sdb_fmt.cpp
 )

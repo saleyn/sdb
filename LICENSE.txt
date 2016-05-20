@@ -1,24 +1,24 @@
-SecDB license model
+SDB license model
 ===================
 
-SecDB is released under a dual license model.
+SDB is released under a dual license model.
 
-SecDB for open source projects
+SDB for open source projects
 ==============================
 
 If you are developing and distributing Open Source applications under the GNU Affero General
-Public License (AGPL), or the GNU General Public License (GPL) then you are free to use SecDB
+Public License (AGPL), or the GNU General Public License (GPL) then you are free to use SDB
 under the GNU AGPL License, version 3. The formal terms of the AGPL can be found on the GNU
 website (http://www.gnu.org/licenses/agpl.html).
 Any software that uses code under a AGPL is itself subject to the same AGPL licensing terms.
 
-For licensing SecDB under alternate terms, you should contact the author at <info@omnibi.net>
+For licensing SDB under alternate terms, you should contact the author at <info@omnibi.net>
 to purchase a commercial license.
 
-SecDB commercial license
+SDB commercial license
 ========================
 
-If you do not license the source code under the GPL, but still like to include SecDB in your
+If you do not license the source code under the GPL, but still like to include SDB in your
 projects then you need to purchase a commercial license.
 
 The Commercial License is an agreement between Omnibius, LLC, and an organization that does
@@ -28,10 +28,10 @@ are also free from the requirement of making their own application Open Source.
 
 Rights granted by a commercial license:
 
-* Selling software that includes SecDB to customers who install the software on their
+* Selling software that includes SDB to customers who install the software on their
   own machines
-* Selling software that requires customers to install SecDB on their own machines
-* Building a hardware system that includes SecDB and selling that hardware system to customers
+* Selling software that requires customers to install SDB on their own machines
+* Building a hardware system that includes SDB and selling that hardware system to customers
   for installation at their own locations.
 
 Specifically:

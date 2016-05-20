@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdbdump.hpp
 //------------------------------------------------------------------------------
-/// \brief SecDB file reader
+/// \brief SDB file reader
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -12,7 +12,6 @@
 //------------------------------------------------------------------------------
 #include <sdb/sdb.hpp>
 #include <utxx/get_option.hpp>
-#include <utxx/path.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/progress.hpp>
@@ -22,7 +21,7 @@
 using namespace std;
 using namespace sdb;
 
-using SecDBFileIO = BaseSecDBFileIO<10>;
+using SDBFileIO = BaseSDBFileIO<10>;
 
 //------------------------------------------------------------------------------
 // Forward declarations
@@ -76,7 +75,7 @@ void UnhandledException() {
 struct Printer {
   Printer
   (
-    SecDBFileIO& a_file, ostream& a_out, uint a_stream_mask,
+    SDBFileIO& a_file, ostream& a_out, uint a_stream_mask,
     utxx::stamp_type a_time_fmt, std::string const& a_xchg,
     std::string const& a_symbol, std::string const& a_instr,
     bool a_tz_local, int    a_max_depth = 100,    bool   a_px_only = false
@@ -106,10 +105,11 @@ struct Printer {
     return true;
   }
 
-  bool operator()(QuoteSample<SecDBFileIO::MAX_DEPTH(), int> const& a) {
+  bool operator()(QuoteSample<SDBFileIO::MAX_DEPTH(), int> const& a) {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
       auto time = m_tz_local
-                ? (m_file.Time() + m_file.Info().TZOffset()) : m_file.Time();
+                ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
+                : m_file.Time();
       m_out << utxx::timestamp::to_string(time, m_datefmt, true)
             << "|Q|";
       if (!m_xchg.empty())   m_out << m_xchg   << '|';
@@ -164,7 +164,7 @@ struct Printer {
   }
 
 private:
-  SecDBFileIO&      m_file;
+  SDBFileIO&      m_file;
   ostream&          m_out;
   uint              m_stream_mask;
   utxx::stamp_type  m_datefmt;
@@ -268,10 +268,9 @@ int main(int argc, char* argv[])
   // If output file not given, use stdout
   if (!outfile.empty() && outfile != "-") {
     auto dir = utxx::path::dirname(outfile);
-    try   { boost::filesystem::create_directories(dir); }
-    catch ( std::exception const& e ) {
+    if (!utxx::path::create_directories(dir))
       UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
-    }
+
     out.open(outfile, std::ios_base::out | std::ios_base::trunc);
     if (!out.is_open())
       UTXX_THROW_IO_ERROR(errno, "Cannot create output file ", outfile);
@@ -293,7 +292,7 @@ int main(int argc, char* argv[])
   // Open SDB file for reading
   //----------------------------------------------------------------------------
   {
-    SecDBFileIO output(filename, debug);
+    SDBFileIO output(filename, debug);
 
     if (info) {
       if (!debug)

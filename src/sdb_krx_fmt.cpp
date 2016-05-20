@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdb_krx_fmt.hpp
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SDB file format reader/writer
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -26,7 +26,7 @@ void Usage(std::string const& a_text = "")
   if (!a_text.empty())
     cout << a_text << endl << endl;
 
-  cout << "KRX to SecDB file format converter\n"
+  cout << "KRX to SDB file format converter\n"
        << "Copyright (c) 2015 Omnibius, LLC\n\n"
        << "Usage: " << utxx::path::program::name()
        << " -f MDFilename -x Exchange -s Symbol -i Instr -n SecID -y Date\n"
@@ -37,7 +37,7 @@ void Usage(std::string const& a_text = "")
        << "  -O|--full-dir OutDir - deep output directory (same as -o option,\n"
        << "                         except the subdirectory structure is\n"
        << "                         created inside OutDir according to\n"
-       << "                         SecDB directory specification format\n"
+       << "                         SDB directory specification format\n"
        << "  -d                   - enable debug printouts\n"
        << "  -q                   - quiet mode (don't display a progress bar)\n"
        << "  -x|--xchg Exchange   - name of the financial exchange\n"
@@ -184,7 +184,7 @@ int main(int argc, char* argv[])
   long file_size = utxx::path::file_size(filename);
   long file_pos  = 0;
 
-  BaseSecDBFileIO<3> output;
+  BaseSDBFileIO<3> output;
 
   output.Debug(debug);
 

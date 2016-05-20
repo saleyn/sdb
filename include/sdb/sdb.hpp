@@ -12,4 +12,4 @@
 //------------------------------------------------------------------------------
 #pragma once
 
-#include <sdb/sdb_fmt_io.hpp>
+#include <sdb/sdb_fmt_io.hxx>

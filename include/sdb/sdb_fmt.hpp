@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 /// \file  sdb_fmt.hpp
 //------------------------------------------------------------------------------
-/// \brief SecDB file format reader/writer
+/// \brief SDB file format reader/writer
 ///
 /// \see https://github.com/saleyn/sdb/wiki/Data-Format
 //------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ inline int uleb128_encode(uint64_t a_value, char*& a_buf) {
 }
 
 /// File opening mode
-enum OpenMode  { Read, Write };
+enum OpenMode  { Read, Write, Append };
 
 enum PriceUnit {
     DoubleVal     // Price expressed in floating decimal point (e.g. px=0.01)
@@ -91,11 +91,11 @@ inline uuid UUID(std::string const& a) { return boost::uuids::string_generator()
 std::string ToString(uuid const& a);
 
 //------------------------------------------------------------------------------
-// SecDB data format constants
+// SDB data format constants
 //------------------------------------------------------------------------------
-/// SecDB version
+/// SDB version
 static constexpr uint VERSION()           { return 1;          }
-/// SecDB marker indicating beginning of stream data section
+/// SDB marker indicating beginning of stream data section
 static constexpr uint BEGIN_STREAM_DATA() { return 0xABBABABA; }
 
 
