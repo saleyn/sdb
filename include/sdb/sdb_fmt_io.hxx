@@ -203,15 +203,16 @@ template <OpenMode Mode>
 size_t BaseSDBFileIO<MaxDepth>::
 DoOpen(std::string const& a_name, int a_perm)
 {
-  auto name = a_name; //boost::to_upper_copy(a_name);
-  auto dir  = utxx::path::dirname(name);
+  auto name  = a_name; //boost::to_upper_copy(a_name);
+  auto dir   = utxx::path::dirname(name);
   if (!utxx::path::create_directories(dir))
     UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
 
-  auto mode = Mode == OpenMode::Read  ? O_RDONLY :
-              Mode == OpenMode::Write ? O_RDWR|O_CREAT|O_TRUNC
-                                      : O_RDWR;
-  int  fd   = ::open(name.c_str(), mode, a_perm);
+  bool found = utxx::path::file_exists(name);
+  auto mode  = Mode == OpenMode::Read             ? O_RDONLY :
+              (Mode == OpenMode::Append && found) ? O_RDWR
+                                                  : O_RDWR|O_CREAT|O_TRUNC;
+  int  fd    = ::open(name.c_str(), mode, a_perm);
 
   if  (fd < 0)
     UTXX_THROW_IO_ERROR(errno, "Cannot open file ", name.c_str());
@@ -231,8 +232,8 @@ DoOpen(std::string const& a_name, int a_perm)
 
   m_filename    = name;
   m_mode        = Mode;
-  m_file        = fdopen(fd, Mode == OpenMode::Read ? "r" : "w+");
-  m_existing    = false;
+  m_file        = fdopen(fd,Mode == OpenMode::Read ? "r" : "w+");
+  m_existing    = found && (Mode == OpenMode::Read || Mode == OpenMode::Append);
   m_last_sec    = 0;
   m_last_usec   = 0;
   m_next_second = 0;
