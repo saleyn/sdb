@@ -98,7 +98,8 @@ int Header::Read(FILE* a_file, size_t a_file_size)
       eol = true;
   }
 
-  return ftell(a_file);
+  n = ftell(a_file);
+  return n;
 }
 
 //------------------------------------------------------------------------------
@@ -147,8 +148,11 @@ int Header::Write(FILE* a_file, int a_debug)
 //------------------------------------------------------------------------------
 std::ostream& Header::Print(std::ostream& out, const std::string& a_ident) const
 {
-  char buf[16];
+  char buf[32];
   utxx::timestamp::write_date(buf, m_date.sec(), true, 10, '-');
+  buf[10] = ' ';
+  utxx::timestamp::write_time(buf+11, m_date, utxx::TIME, true, ':');
+  buf[19] = '\0';
 
   return out
     << a_ident << "Version....: " << m_version       << '\n'
@@ -447,7 +451,7 @@ int CandlesMeta::Write(FILE* a_file, int a_debug)
 
   *p++ = CODE();                            // CandlesMeta identifier
   *p++ = 0;                                 // Filler
-  utxx::put16le(p, Headers().size());        // Number of candle resolutions
+  utxx::put16le(p, Headers().size());       // Number of candle resolutions
 
   size_t sz = p-buf;
 

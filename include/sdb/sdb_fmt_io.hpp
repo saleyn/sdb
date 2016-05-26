@@ -42,33 +42,36 @@ struct BaseSDBFileIO {
 
   ~BaseSDBFileIO() { Close(); }
 
-  static constexpr uint MAX_DEPTH()       { return MaxDepth;              }
+  static constexpr uint MAX_DEPTH()         { return MaxDepth;              }
 
-  bool                IsOpen()      const { return m_file != nullptr;     }
+  bool                IsOpen()        const { return m_file != nullptr;     }
 
-  Header      const&  Info()        const { return m_header;              }
-  time_t              Date()        const { return m_header.Date();       }
-  time_val    const&  Midnight()    const { return m_header.Midnight();   }
-  std::string const&  Filename()    const { return m_filename;            }
+  Header      const&  Info()          const { return m_header;              }
+  time_t              Date()          const { return m_header.Date();       }
+  time_val    const&  Midnight()      const { return m_header.Midnight();   }
+  std::string const&  Filename()      const { return m_filename;            }
 
-  std::string         TZ()          const { return m_header.TZ();         }
-  std::string const&  TZName()      const { return m_header.TZName();     }
-  int                 TZOffset()    const { return m_header.TZOffset();   }
+  std::string         TZ()            const { return m_header.TZ();         }
+  std::string const&  TZName()        const { return m_header.TZName();     }
+  int                 TZOffset()      const { return m_header.TZOffset();   }
 
-  int                 Debug()       const { return m_debug;               }
-  void                Debug(int a)        { m_debug = a;                  }
+  int                 Debug()         const { return m_debug;               }
+  void                Debug(int a)          { m_debug = a;                  }
 
-  time_val    const&  Time()        const { return m_last_ts;             }
+  time_val    const&  Time()          const { return m_last_ts;             }
 
   /// Minimal price step (e.g. 0.0001)
-  double              PxStep()      const { return m_header.PxStep();     }
+  double              PxStep()        const { return m_header.PxStep();     }
   /// Price scale (e.g. 10000)
-  int                 PxScale()     const { return m_header.PxScale();    }
+  int                 PxScale()       const { return m_header.PxScale();    }
   /// Price precision in digits after the decimal point (e.g. 4)
-  int                 PxPrecision() const { return m_header.PxPrecision();}
+  int                 PxPrecision()   const { return m_header.PxPrecision();}
+
+  /// After opening a file this method tells if appending data to existing file
+  bool                Existing()      const { return m_existing;            }
 
   /// Get filename based on given arguments
-  static std::string Filename
+  static std::string  Filename
   (
     std::string const& a_dir,
     bool               a_deep_dir,

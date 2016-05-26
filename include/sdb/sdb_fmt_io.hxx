@@ -351,6 +351,12 @@ WriteCandlesMeta(CandlesMeta&& a_meta)
     UTXX_THROW_RUNTIME_ERROR
       ("Candles metadata already written to file ", m_filename);
 
+  if (m_debug) {
+    auto n = ftell(m_file);
+    std::cerr << "  CandlesMeta position: " << std::dec << n
+              << " (" << std::hex << n      << std::dec << ")\n";
+  }
+
   if (a_meta.Write(m_file, m_debug) < 0)
     UTXX_THROW_IO_ERROR(errno, "Error writing candle data to file ", m_filename);
 
@@ -368,7 +374,8 @@ WriteCandlesMeta(CandlesMeta&& a_meta)
   utxx::put32le(p, BEGIN_STREAM_DATA());
 
   if (m_debug)
-    std::cerr << " Begin Stream Marker: " << std::hex << ftell(m_file) << std::endl;
+    std::cerr << " Begin Stream Marker: "  << std::dec << ftell(m_file) << " ("
+              << std::hex << ftell(m_file) << ')'      << std::dec << std::endl;
 
   if (fwrite(buf, 1, sizeof(buf), m_file) != sizeof(buf))
     UTXX_THROW_IO_ERROR

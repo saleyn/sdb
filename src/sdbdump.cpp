@@ -292,13 +292,13 @@ int main(int argc, char* argv[])
   // Open SDB file for reading
   //----------------------------------------------------------------------------
   {
-    SDBFileIO output(filename, debug);
+    SDBFileIO input(filename, debug);
 
     if (info) {
       if (!debug)
-        output.Info().Print(std::cout);
+        input.Info().Print(std::cout);
     } else if (resol)
-      output.PrintCandles(out, resol);
+      input.PrintCandles(out, resol);
     else {
       auto date_fmt =  fulldate &&  msec_time ? utxx::DATE_TIME_WITH_MSEC
                     :  fulldate && !msec_time ? utxx::DATE_TIME_WITH_USEC
@@ -307,13 +307,13 @@ int main(int argc, char* argv[])
 
       Printer printer
       (
-        output, cout, stream_mask, date_fmt,
-        with_xchg   ? output.Info().Exchange()   : "",
-        with_symbol ? output.Info().Symbol()     : "",
-        with_instr  ? output.Info().Instrument() : "",
+        input, cout, stream_mask, date_fmt,
+        with_xchg   ? input.Info().Exchange()   : "",
+        with_symbol ? input.Info().Symbol()     : "",
+        with_instr  ? input.Info().Instrument() : "",
         tz_local, max_depth, px_only
       );
-      output.Read(printer);
+      input.Read(printer);
     }
   }
 
