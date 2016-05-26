@@ -44,6 +44,7 @@ void Usage(std::string const& a_text = "")
        << "  -q                    - quiet mode (don't display a progress bar)\n"
        << "  -m|--max-depth Levels - limit max book depth to number of Levels\n"
        << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  --epoch               - Output time as integer (us or ms) since epoch\n"
        << "  --msec                - use millisecond time resolution (def usec)\n"
        << "  -z|--tz-local         - format time in the file's local time zone\n"
        << "  -Z|--tz-utc           - format time in the UTC time zone (default)\n"
@@ -75,10 +76,11 @@ void UnhandledException() {
 struct Printer {
   Printer
   (
-    SDBFileIO& a_file, ostream& a_out, uint a_stream_mask,
+    SDBFileIO& a_file,  ostream& a_out, uint a_stream_mask,
     utxx::stamp_type a_time_fmt, std::string const& a_xchg,
     std::string const& a_symbol, std::string const& a_instr,
-    bool a_tz_local, int    a_max_depth = 100,    bool   a_px_only = false
+    bool a_tz_local,             bool a_epoch,
+    int  a_max_depth = 100,      bool a_px_only = false
   )
     : m_file(a_file), m_out(a_out), m_stream_mask(a_stream_mask)
     , m_datefmt(a_time_fmt)
@@ -87,17 +89,27 @@ struct Printer {
     , m_instr (a_instr)
     , m_max_depth(a_max_depth)
     , m_px_only(a_px_only)
+    , m_epoch(a_epoch)
     , m_tz_local(a_tz_local)
   {
-    if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0)
-      m_out << "#" << (m_tz_local ? "Local"      : "UTC") << "Time|Q|"
-            << (m_xchg.empty()    ? "Xchg|"      : "")
-            << (m_symbol.empty()  ? "Symbol|"    : "")
-            << (m_instr.empty()   ? "Insrument|" : "")    << "Bids|Asks" << endl;
-    if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0)
-      m_out << '#' << (m_tz_local ? "Local"      : "UTC") << "Time|T|"
-            << (m_symbol.empty() ? "Symbol|"     : "")
-            << (m_instr.empty()  ? "Insrument|"  : "")
+    bool    quotes = (m_stream_mask & (1 << int(StreamType::Quotes))) != 0;
+    bool    trades = (m_stream_mask & (1 << int(StreamType::Trade)))  != 0;
+    m_qt_indicator = quotes && trades;
+
+    auto       res = a_time_fmt == utxx::DATE_TIME_WITH_MSEC ? "(ms)" : "(us)";
+
+    if (quotes)
+      m_out << "#" << (m_tz_local ? "Local"      : "UTC") << "Time" << res << "|"
+            << (m_qt_indicator    ? "Q|"         : "")
+            << (!m_xchg.empty()   ? "Xchg|"      : "")
+            << (!m_symbol.empty() ? "Symbol|"    : "")
+            << (!m_instr.empty()  ? "Insrument|" : "")    << "Bids|Asks" << endl;
+    if (trades)
+      m_out << '#' << (m_tz_local ? "Local"      : "UTC") << "Time" << res << "|"
+            << (m_qt_indicator    ? "T|"         : "")
+            << (!m_xchg.empty()   ? "Xchg|"      : "")
+            << (!m_symbol.empty() ? "Symbol|"    : "")
+            << (!m_instr.empty()  ? "Insrument|" : "")
             << "Side|Price|Qty|TradeID|OrderID" << endl;
   }
 
@@ -107,11 +119,19 @@ struct Printer {
 
   bool operator()(QuoteSample<SDBFileIO::MAX_DEPTH(), int> const& a) {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
-      auto time = m_tz_local
-                ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
-                : m_file.Time();
-      m_out << utxx::timestamp::to_string(time, m_datefmt, true)
-            << "|Q|";
+      if (m_epoch)
+        m_out << (m_datefmt == utxx::DATE_TIME_WITH_MSEC
+                             ? m_file.Time().milliseconds()
+                             : m_file.Time().microseconds());
+      else {
+        auto time = m_tz_local
+                  ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
+                  : m_file.Time();
+        m_out << utxx::timestamp::to_string(time, m_datefmt, true);
+      }
+
+      m_out << '|';
+      if (m_qt_indicator)    m_out << "Q|";
       if (!m_xchg.empty())   m_out << m_xchg   << '|';
       if (!m_symbol.empty()) m_out << m_symbol << '|';
       if (!m_instr.empty())  m_out << m_instr  << '|';
@@ -139,10 +159,19 @@ struct Printer {
 
   bool operator()(TradeSample const& a_trade) {
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0) {
-      auto time = m_tz_local
-                ? (m_file.Time() + m_file.Info().TZOffset()) : m_file.Time();
-      m_out << utxx::timestamp::to_string(time, m_datefmt, m_tz_local)
-            << "|T|";
+      if (m_epoch)
+        m_out << (m_datefmt == utxx::DATE_TIME_WITH_MSEC
+                             ? m_file.Time().milliseconds()
+                             : m_file.Time().microseconds());
+      else {
+        auto time = m_tz_local
+                  ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
+                  : m_file.Time();
+        m_out << utxx::timestamp::to_string(time, m_datefmt, true);
+      }
+
+      m_out << '|';
+      if (m_qt_indicator)    m_out << "T|";
       if (!m_symbol.empty()) m_out << m_symbol << '|';
       if (!m_instr.empty())  m_out << m_instr  << '|';
       m_out << ToChar(a_trade.Side()) << '|'
@@ -173,7 +202,9 @@ private:
   std::string       m_instr;
   int               m_max_depth;
   bool              m_px_only;
+  bool              m_epoch;
   bool              m_tz_local;
+  bool              m_qt_indicator;
 };
 
 //------------------------------------------------------------------------------
@@ -195,6 +226,7 @@ int main(int argc, char* argv[])
   bool        with_xchg   = false;
   bool        px_only     = false;
   bool        tz_local    = false;
+  bool        epoch       = false;
   int         debug       = 0;
   int         max_depth   = 100;
   std::string outfile;
@@ -218,9 +250,10 @@ int main(int argc, char* argv[])
       if (opts.match("-S", "--symbol", &with_symbol)) continue;
       if (opts.match("-X", "--xchg",     &with_xchg)) continue;
       if (opts.match("-I", "--instr",   &with_instr)) continue;
+      if (opts.match("",   "--epoch",        &epoch)) continue;
       if (opts.match("-z", "--tz-local",  &tz_local)) continue;
       if (opts.match("-Z", "--tz-utc")) { tz_local=0; continue; }
-      if (opts.match("", "--msec",       &msec_time)) continue;
+      if (opts.match("",   "--msec",     &msec_time)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
         continue;
@@ -236,7 +269,8 @@ int main(int argc, char* argv[])
       Usage(string("Invalid option: ") + opts());
   }
 
-  if (filename.empty())                   Usage("Missing required option -f");
+  if (epoch && tz_local)  Usage("Epoch timestamps can't be in local time zone");
+  if (filename.empty())   Usage("Missing required option -f");
   if (!info) {
     if (!stream_mask && !sresol.empty())  Usage("Missing -Q|-T|-C");
     if (!sresol.empty()) {
@@ -311,7 +345,7 @@ int main(int argc, char* argv[])
         with_xchg   ? input.Info().Exchange()   : "",
         with_symbol ? input.Info().Symbol()     : "",
         with_instr  ? input.Info().Instrument() : "",
-        tz_local, max_depth, px_only
+        tz_local, epoch, max_depth, px_only
       );
       input.Read(printer);
     }
