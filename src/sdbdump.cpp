@@ -45,8 +45,8 @@ void Usage(std::string const& a_text = "")
        << "  -m|--max-depth Levels - limit max book depth to number of Levels\n"
        << "  -D                    - include YYYYMMDD in timestamp output\n"
        << "  --msec                - use millisecond time resolution (def usec)\n"
-       << "  --tz-local            - format time in the file's local time zone\n"
-       << "  --tz-utc              - format time in the UTC time zone (default)\n"
+       << "  -z|--tz-local         - format time in the file's local time zone\n"
+       << "  -Z|--tz-utc           - format time in the UTC time zone (default)\n"
        << "  -p|--px-only          - don't display quantity information\n"
        << "  -S|--symbol           - include symbol name in the output\n"
        << "  -X|--xchg             - include exchange name in the output\n"
@@ -218,8 +218,8 @@ int main(int argc, char* argv[])
       if (opts.match("-S", "--symbol", &with_symbol)) continue;
       if (opts.match("-X", "--xchg",     &with_xchg)) continue;
       if (opts.match("-I", "--instr",   &with_instr)) continue;
-      if (opts.match("", "--tz-local",    &tz_local)) continue;
-      if (opts.match("", "--tz-utc"))   { tz_local=0; continue; }
+      if (opts.match("-z", "--tz-local",  &tz_local)) continue;
+      if (opts.match("-Z", "--tz-utc")) { tz_local=0; continue; }
       if (opts.match("", "--msec",       &msec_time)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);

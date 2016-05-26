@@ -136,9 +136,14 @@ void BaseSDBFileIO<MaxDepth>::Open
         UTXX_THROW_RUNTIME_ERROR("Instrument of file '", name, "' (",
                                   m_header.Instrument(), ") doesn't match '",
                                   a_instr, "'");
+      m_streams_meta.Read(m_file);
+      m_candles_meta.Read(m_file);
+
       // Read all samples till the end of the file
       auto dummy = [](auto& sample) {};
       Read(dummy);
+
+      m_existing = true;
     }
   }
 
@@ -693,7 +698,7 @@ Read(OnSample a_fun)
           if (n > 0) {
             time_t secs     = m_header.Midnight().sec() + ss.Time();
             m_last_ts.set(secs);
-            m_last_sec      = secs;
+            m_last_sec      = ss.Time(); //secs;
             m_last_usec     = 0;
             m_next_second   = m_last_sec + 1;
             m_last_quote_px = NaN();
