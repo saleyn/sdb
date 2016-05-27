@@ -205,7 +205,7 @@ DoOpen(std::string const& a_name, int a_perm)
 {
   auto name  = a_name; //boost::to_upper_copy(a_name);
   auto dir   = utxx::path::dirname(name);
-  if (!utxx::path::create_directories(dir))
+  if (Mode != OpenMode::Read && !utxx::path::create_directories(dir))
     UTXX_THROW_IO_ERROR(errno, "Cannot create directory ", dir);
 
   bool found = utxx::path::file_exists(name);
