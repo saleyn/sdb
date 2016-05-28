@@ -44,6 +44,7 @@ void Usage(std::string const& a_text = "")
        << "  -q                    - quiet mode (don't display a progress bar)\n"
        << "  -m|--max-depth Levels - limit max book depth to number of Levels\n"
        << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  --delim Delimiter     - Use this character as field delimiter\n"
        << "  --epoch               - Output time as integer (us or ms) since epoch\n"
        << "  --msec                - use millisecond time resolution (def usec)\n"
        << "  -z|--tz-local         - format time in the file's local time zone\n"
@@ -80,17 +81,21 @@ struct Printer {
     utxx::stamp_type a_time_fmt, std::string const& a_xchg,
     std::string const& a_symbol, std::string const& a_instr,
     bool a_tz_local,             bool a_epoch,
-    int  a_max_depth = 100,      bool a_px_only = false
+    int  a_max_depth = 100,      bool a_px_only = false,
+    char a_delim     = '|'
   )
-    : m_file(a_file), m_out(a_out), m_stream_mask(a_stream_mask)
-    , m_datefmt(a_time_fmt)
-    , m_xchg(a_xchg)
-    , m_symbol(a_symbol)
-    , m_instr (a_instr)
-    , m_max_depth(a_max_depth)
-    , m_px_only(a_px_only)
-    , m_epoch(a_epoch)
-    , m_tz_local(a_tz_local)
+    : m_file        (a_file)
+    , m_out         (a_out)
+    , m_stream_mask (a_stream_mask)
+    , m_datefmt     (a_time_fmt)
+    , m_xchg        (a_xchg)
+    , m_symbol      (a_symbol)
+    , m_instr       (a_instr)
+    , m_max_depth   (a_max_depth)
+    , m_px_only     (a_px_only)
+    , m_epoch       (a_epoch)
+    , m_tz_local    (a_tz_local)
+    , m_delim       (a_delim)
   {
     bool    quotes = (m_stream_mask & (1 << int(StreamType::Quotes))) != 0;
     bool    trades = (m_stream_mask & (1 << int(StreamType::Trade)))  != 0;
@@ -98,19 +103,23 @@ struct Printer {
 
     auto       res = a_time_fmt == utxx::DATE_TIME_WITH_MSEC ? "(ms)" : "(us)";
 
-    if (quotes)
-      m_out << "#" << (m_tz_local ? "Local"      : "UTC") << "Time" << res << "|"
-            << (m_qt_indicator    ? "Q|"         : "")
-            << (!m_xchg.empty()   ? "Xchg|"      : "")
-            << (!m_symbol.empty() ? "Symbol|"    : "")
-            << (!m_instr.empty()  ? "Insrument|" : "")    << "Bids|Asks" << endl;
-    if (trades)
-      m_out << '#' << (m_tz_local ? "Local"      : "UTC") << "Time" << res << "|"
-            << (m_qt_indicator    ? "T|"         : "")
-            << (!m_xchg.empty()   ? "Xchg|"      : "")
-            << (!m_symbol.empty() ? "Symbol|"    : "")
-            << (!m_instr.empty()  ? "Insrument|" : "")
-            << "Side|Price|Qty|TradeID|OrderID" << endl;
+    if (quotes) {
+      m_out << "#" << (m_tz_local ? "Local" : "UTC") << "Time" << res << m_delim;
+      if (m_qt_indicator   ) m_out << "Q"         << m_delim;
+      if (!m_xchg.empty()  ) m_out << "Xchg"      << m_delim;
+      if (!m_symbol.empty()) m_out << "Symbol"    << m_delim;
+      if (!m_instr.empty() ) m_out << "Insrument" << m_delim;
+      m_out << "Bids"   << m_delim << "Asks"      << endl;
+    }
+    if (trades) {
+      m_out << '#' << (m_tz_local ? "Local" : "UTC") << "Time" << res << m_delim;
+      if (m_qt_indicator   ) m_out << "T"         << m_delim;
+      if (!m_xchg.empty()  ) m_out << "Xchg"      << m_delim;
+      if (!m_symbol.empty()) m_out << "Symbol"    << m_delim;
+      if (!m_instr.empty() ) m_out << "Insrument" << m_delim;
+      m_out << "Side"   << m_delim << "Price"     << "Qty" << m_delim<< "TradeID"
+            << "OrderID"<< endl;
+    }
   }
 
   bool operator()(SecondsSample const& a_sec) {
@@ -130,11 +139,11 @@ struct Printer {
         m_out << utxx::timestamp::to_string(time, m_datefmt, true);
       }
 
-      m_out << '|';
-      if (m_qt_indicator)    m_out << "Q|";
-      if (!m_xchg.empty())   m_out << m_xchg   << '|';
-      if (!m_symbol.empty()) m_out << m_symbol << '|';
-      if (!m_instr.empty())  m_out << m_instr  << '|';
+      m_out << m_delim;
+      if (m_qt_indicator)    m_out << "Q" << m_delim;
+      if (!m_xchg.empty())   m_out << m_xchg   << m_delim;
+      if (!m_symbol.empty()) m_out << m_symbol << m_delim;
+      if (!m_instr.empty())  m_out << m_instr  << m_delim;
       int i = 0;
       auto eb = a.EndBid();
       auto ea = a.EndAsk();
@@ -144,7 +153,7 @@ struct Printer {
         m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
               << (m_file.PxStep() * p->m_px);
       }
-      m_out << '|';
+      m_out << m_delim;
       i = 0;
       for (auto p = a.BestAsk(); p != ea && i < m_max_depth; a.NextAsk(p), ++i) {
         m_out << (i ? " " : "");
@@ -170,16 +179,17 @@ struct Printer {
         m_out << utxx::timestamp::to_string(time, m_datefmt, true);
       }
 
-      m_out << '|';
-      if (m_qt_indicator)    m_out << "T|";
-      if (!m_symbol.empty()) m_out << m_symbol << '|';
-      if (!m_instr.empty())  m_out << m_instr  << '|';
-      m_out << ToChar(a_trade.Side()) << '|'
+      m_out << m_delim;
+      if (m_qt_indicator)    m_out << "T" << m_delim;
+      if (!m_symbol.empty()) m_out << m_symbol << m_delim;
+      if (!m_instr.empty())  m_out << m_instr  << m_delim;
+      m_out << ToChar(a_trade.Side()) << m_delim
             << std::setprecision(m_file.PxPrecision()) << std::fixed
             << (m_file.PxStep() * a_trade.Price())
-            << '|' << a_trade.Qty() << '|' << ToChar(a_trade.Aggr()) << '|';
+            << m_delim << a_trade.Qty() << m_delim << ToChar(a_trade.Aggr())
+            << m_delim;
       if (a_trade.HasTradeID()) m_out << a_trade.TradeID();
-      m_out << '|';
+      m_out << m_delim;
       if (a_trade.HasOrderID()) m_out << a_trade.OrderID();
       m_out << endl;
     }
@@ -193,7 +203,7 @@ struct Printer {
   }
 
 private:
-  SDBFileIO&      m_file;
+  SDBFileIO&        m_file;
   ostream&          m_out;
   uint              m_stream_mask;
   utxx::stamp_type  m_datefmt;
@@ -205,6 +215,7 @@ private:
   bool              m_epoch;
   bool              m_tz_local;
   bool              m_qt_indicator;
+  char              m_delim;
 };
 
 //------------------------------------------------------------------------------
@@ -229,6 +240,7 @@ int main(int argc, char* argv[])
   bool        epoch       = false;
   int         debug       = 0;
   int         max_depth   = 100;
+  char        delim       = '|';
   std::string outfile;
   std::string sresol;
   int         resol       = 0;
@@ -250,6 +262,7 @@ int main(int argc, char* argv[])
       if (opts.match("-S", "--symbol", &with_symbol)) continue;
       if (opts.match("-X", "--xchg",     &with_xchg)) continue;
       if (opts.match("-I", "--instr",   &with_instr)) continue;
+      if (opts.match("",   "--delim",        &delim)) continue;
       if (opts.match("",   "--epoch",        &epoch)) continue;
       if (opts.match("-z", "--tz-local",  &tz_local)) continue;
       if (opts.match("-Z", "--tz-utc")) { tz_local=0; continue; }
@@ -345,7 +358,7 @@ int main(int argc, char* argv[])
         with_xchg   ? input.Info().Exchange()   : "",
         with_symbol ? input.Info().Symbol()     : "",
         with_instr  ? input.Info().Instrument() : "",
-        tz_local, epoch, max_depth, px_only
+        tz_local, epoch, max_depth, px_only, delim
       );
       input.Read(printer);
     }
