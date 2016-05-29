@@ -38,26 +38,28 @@ void Usage(std::string const& a_text = "")
        << "Usage: " << utxx::path::program::name()
        << " -f MDFilename [-o|-O OutputFile] [-d] [-q]\n"
        << "\nOptions:\n"
-       << "  -f MDFilename         - filename with KRX market data\n"
-       << "  -o|--output OutFile   - output filename (def: stdout)\n"
-       << "  -d                    - enable debug printouts\n"
-       << "  -q                    - quiet mode (don't display a progress bar)\n"
-       << "  -m|--max-depth Levels - limit max book depth to number of Levels\n"
-       << "  -D                    - include YYYYMMDD in timestamp output\n"
+       << "  -f MDFilename         - Filename with KRX market data\n"
+       << "  -o|--output OutFile   - Output filename (def: stdout)\n"
+       << "  -d                    - Enable debug printouts\n"
+       << "  -q                    - Quiet mode (don't display a progress bar)\n"
+       << "  -m|--max-depth Levels - Limit max book depth to number of Levels\n"
+       << "  -D                    - Include YYYYMMDD in timestamp output\n"
        << "  --delim Delimiter     - Use this character as field delimiter (def: '|')\n"
+       << "  --px-delim Delimiter  - Use this character as price delimiter (def: ' ')\n"
        << "  --qty-delim Delimiter - Use this character as quantity delimiter (def: '@')\n"
        << "  --epoch               - Output time as integer (us or ms) since epoch\n"
-       << "  --msec                - use millisecond time resolution (def: usec)\n"
-       << "  -z|--tz-local         - format time in the file's local time zone\n"
-       << "  -Z|--tz-utc           - format time in the UTC time zone (default)\n"
-       << "  -p|--px-only          - don't display quantity information\n"
-       << "  -S|--symbol           - include symbol name in the output\n"
-       << "  -X|--xchg             - include exchange name in the output\n"
-       << "  -I|--instr            - include instrument name in the output\n"
-       << "  -Q|--quotes           - print quotes\n"
-       << "  -T|--trades           - print trades\n"
-       << "  --agg-qty NumLevels   - print aggregated quantity of NumLevels\n"
-       << "  -C|--candles Resol    - print candles of given resolution\n"
+       << "  --msec                - Use millisecond time resolution (def: usec)\n"
+       << "  -z|--tz-local         - Format time in the file's local time zone\n"
+       << "  -Z|--tz-utc           - Format time in the UTC time zone (default)\n"
+       << "  -p|--px-only          - Don't display quantity information\n"
+       << "  -S|--symbol           - Include symbol name in the output\n"
+       << "  -X|--xchg             - Include exchange name in the output\n"
+       << "  -I|--instr            - Include instrument name in the output\n"
+       << "  -Q|--quotes           - Print quotes\n"
+       << "  -T|--trades           - Print trades\n"
+       << "  --agg-qty NumLevels   - Print aggregated quantity of NumLevels\n"
+       << "  -F|--fixed-cols       - Print fixed number of price/qty columns\n"
+       << "  -C|--candles Resol    - Print candles of given resolution\n"
        << "                             Valid resolutions: Ny, where:\n"
        << "                               N - resolution interval\n"
        << "                               y - (s)econds, (m)inutes, (h)ours\n"
@@ -83,9 +85,10 @@ struct Printer {
     utxx::stamp_type a_time_fmt, std::string const& a_xchg,
     std::string const& a_symbol, std::string const& a_instr,
     bool a_tz_local,             bool a_epoch,
-    int  a_max_depth = 100,      bool a_px_only   = false,
-    int  a_agg_qty   = 0,
-    char a_delim     = '|',      char a_qty_delim = '@'
+    int  a_max_depth = 100,      bool a_px_only       = false,
+    int  a_agg_qty   = 0,        bool a_fixed_columns = false,
+    char a_delim     = '|',
+    char a_px_delim  = ' ',      char a_qty_delim = '@'
   )
     : m_file        (a_file)
     , m_out         (a_out)
@@ -100,7 +103,9 @@ struct Printer {
     , m_epoch       (a_epoch)
     , m_tz_local    (a_tz_local)
     , m_delim       (a_delim)
+    , m_px_delim    (a_px_delim)
     , m_qty_delim   (a_qty_delim)
+    , m_fixed_cols  (a_fixed_columns)
   {
     bool    quotes = (m_stream_mask & (1 << int(StreamType::Quotes))) != 0;
     bool    trades = (m_stream_mask & (1 << int(StreamType::Trade)))  != 0;
@@ -157,19 +162,27 @@ struct Printer {
       auto eb = a.EndBid();
       auto ea = a.EndAsk();
       for (auto p = a.BestBid(); p != eb && i < m_max_depth; a.NextBid(p), ++i) {
-        m_out << (i ? " " : "");
-        if (!m_px_only) m_out << p->m_qty      << m_qty_delim;
-        m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
-              << (m_file.PxStep() * p->m_px);
-      }
-      m_out << m_delim;
-      i = 0;
-      for (auto p = a.BestAsk(); p != ea && i < m_max_depth; a.NextAsk(p), ++i) {
-        m_out << (i ? " " : "");
+        if (i) m_out << m_px_delim;
         if (!m_px_only) m_out << p->m_qty << m_qty_delim;
         m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
               << (m_file.PxStep() * p->m_px);
       }
+      if (m_fixed_cols)
+        while (i++ < m_max_depth) m_out << m_px_delim;
+
+      m_out << m_delim;
+
+      i = 0;
+      for (auto p = a.BestAsk(); p != ea && i < m_max_depth; a.NextAsk(p), ++i) {
+        if (i) m_out << m_px_delim;
+        if (!m_px_only) m_out << p->m_qty << m_qty_delim;
+        m_out << std::setprecision(m_file.PxPrecision()) << std::fixed
+              << (m_file.PxStep() * p->m_px);
+      }
+
+      if (m_fixed_cols)
+        while (i++ < m_max_depth) m_out << m_px_delim;
+
       if (m_agg_qty) {
         long bid_qty = 0, ask_qty = 0;
         i = 0;
@@ -236,7 +249,9 @@ private:
   bool              m_tz_local;
   bool              m_qt_indicator;
   char              m_delim;
+  char              m_px_delim;
   char              m_qty_delim;
+  bool              m_fixed_cols;
 };
 
 //------------------------------------------------------------------------------
@@ -263,7 +278,9 @@ int main(int argc, char* argv[])
   int         debug       = 0;
   int         max_depth   = 100;
   char        delim       = '|';
+  char        px_delim    = ' ';
   char        qty_delim   = '@';
+  bool        fixed_cols  = false;
   std::string outfile;
   std::string sresol;
   int         resol       = 0;
@@ -274,24 +291,26 @@ int main(int argc, char* argv[])
   //----------------------------------------------------------------------------
   utxx::opts_parser opts(argc, argv);
   while  (opts.next()) {
-      if (opts.match("-f", "",            &filename)) continue;
-      if (opts.match("-i", "--info",          &info)) continue;
-      if (opts.match("-m", "--max-depth",&max_depth)) continue;
-      if (opts.match("-d", "--debug"))   { debug++;   continue; }
-      if (opts.match("-D", "--full-date", &fulldate)) continue;
-      if (opts.match("-q", "--quiet",        &quiet)) continue;
-      if (opts.match("-p", "--px-only",    &px_only)) continue;
-      if (opts.match("",   "--agg-qty",    &agg_qty)) continue;
-      if (opts.match("-o", "--output",     &outfile)) continue;
-      if (opts.match("-S", "--symbol", &with_symbol)) continue;
-      if (opts.match("-X", "--xchg",     &with_xchg)) continue;
-      if (opts.match("-I", "--instr",   &with_instr)) continue;
-      if (opts.match("",   "--delim",        &delim)) continue;
-      if (opts.match("",   "--qty-delim",&qty_delim)) continue;
-      if (opts.match("",   "--epoch",        &epoch)) continue;
-      if (opts.match("-z", "--tz-local",  &tz_local)) continue;
-      if (opts.match("-Z", "--tz-utc")) { tz_local=0; continue; }
-      if (opts.match("",   "--msec",     &msec_time)) continue;
+      if (opts.match("-f", "",              &filename)) continue;
+      if (opts.match("-i", "--info",            &info)) continue;
+      if (opts.match("-m", "--max-depth",  &max_depth)) continue;
+      if (opts.match("-d", "--debug"))     { debug++;   continue; }
+      if (opts.match("-D", "--full-date",   &fulldate)) continue;
+      if (opts.match("-q", "--quiet",          &quiet)) continue;
+      if (opts.match("-p", "--px-only",      &px_only)) continue;
+      if (opts.match("",   "--agg-qty",      &agg_qty)) continue;
+      if (opts.match("-o", "--output",       &outfile)) continue;
+      if (opts.match("-S", "--symbol",   &with_symbol)) continue;
+      if (opts.match("-X", "--xchg",       &with_xchg)) continue;
+      if (opts.match("-I", "--instr",     &with_instr)) continue;
+      if (opts.match("",   "--delim",          &delim)) continue;
+      if (opts.match("",   "--px-delim",    &px_delim)) continue;
+      if (opts.match("",   "--qty-delim",  &qty_delim)) continue;
+      if (opts.match("-F", "--fixed-cols",&fixed_cols)) continue;
+      if (opts.match("",   "--epoch",          &epoch)) continue;
+      if (opts.match("-z", "--tz-local",    &tz_local)) continue;
+      if (opts.match("-Z", "--tz-utc"))   { tz_local=0; continue; }
+      if (opts.match("",   "--msec",       &msec_time)) continue;
       if (opts.match("-Q", "--quotes")) {
         stream_mask |= 1u << int(StreamType::Quotes);
         continue;
@@ -383,7 +402,8 @@ int main(int argc, char* argv[])
         with_xchg   ? input.Info().Exchange()   : "",
         with_symbol ? input.Info().Symbol()     : "",
         with_instr  ? input.Info().Instrument() : "",
-        tz_local, epoch, max_depth, px_only, agg_qty, delim, qty_delim
+        tz_local, epoch, max_depth, px_only, agg_qty, fixed_cols,
+        delim, px_delim, qty_delim
       );
       input.Read(printer);
     }
