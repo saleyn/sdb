@@ -81,7 +81,8 @@ void UnhandledException() {
 struct Printer {
   Printer
   (
-    SDBFileIO& a_file,  ostream& a_out, uint a_stream_mask,
+    SDBFileIO& a_file,           ostream& a_out,
+    uint a_stream_mask,          bool a_msec_time,
     utxx::stamp_type a_time_fmt, std::string const& a_xchg,
     std::string const& a_symbol, std::string const& a_instr,
     bool a_tz_local,             bool a_epoch,
@@ -93,6 +94,7 @@ struct Printer {
     : m_file        (a_file)
     , m_out         (a_out)
     , m_stream_mask (a_stream_mask)
+    , m_msec        (a_msec_time)
     , m_datefmt     (a_time_fmt)
     , m_xchg        (a_xchg)
     , m_symbol      (a_symbol)
@@ -143,9 +145,8 @@ struct Printer {
   bool operator()(QuoteSample<SDBFileIO::MAX_DEPTH(), int> const& a) {
     if ((m_stream_mask & (1 << int(StreamType::Quotes))) != 0) {
       if (m_epoch)
-        m_out << (m_datefmt == utxx::DATE_TIME_WITH_MSEC
-                             ? m_file.Time().milliseconds()
-                             : m_file.Time().microseconds());
+        m_out << (m_msec ? m_file.Time().milliseconds()
+                         : m_file.Time().microseconds());
       else {
         auto time = m_tz_local
                   ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
@@ -201,9 +202,8 @@ struct Printer {
   bool operator()(TradeSample const& a_trade) {
     if ((m_stream_mask & (1 << int(StreamType::Trade))) != 0) {
       if (m_epoch)
-        m_out << (m_datefmt == utxx::DATE_TIME_WITH_MSEC
-                             ? m_file.Time().milliseconds()
-                             : m_file.Time().microseconds());
+        m_out << (m_msec ? m_file.Time().milliseconds()
+                         : m_file.Time().microseconds());
       else {
         auto time = m_tz_local
                   ? (m_file.Time() + utxx::secs(m_file.Info().TZOffset()))
@@ -238,6 +238,7 @@ private:
   SDBFileIO&        m_file;
   ostream&          m_out;
   uint              m_stream_mask;
+  bool              m_msec;
   utxx::stamp_type  m_datefmt;
   std::string       m_xchg;
   std::string       m_symbol;
@@ -398,7 +399,7 @@ int main(int argc, char* argv[])
 
       Printer printer
       (
-        input, cout, stream_mask, date_fmt,
+        input, cout, stream_mask, msec_time, date_fmt,
         with_xchg   ? input.Info().Exchange()   : "",
         with_symbol ? input.Info().Symbol()     : "",
         with_instr  ? input.Info().Instrument() : "",
