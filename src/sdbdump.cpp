@@ -1,5 +1,5 @@
 // vim:ts=2:sw=2:et
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 /// \file  sdbdump.hpp
 //------------------------------------------------------------------------------
 /// \brief SDB file reader
@@ -44,8 +44,8 @@ void Usage(std::string const& a_text = "")
        << "  -q                    - Quiet mode (don't display a progress bar)\n"
        << "  -m|--max-depth Levels - Limit max book depth to number of Levels\n"
        << "  -D                    - Include YYYYMMDD in timestamp output\n"
-       << "  --delim Delimiter     - Use this character as field delimiter (def: '|')\n"
-       << "  --px-delim Delimiter  - Use this character as price delimiter (def: ' ')\n"
+       << "  --delim     Delimiter - Use this character as field delimiter (def: '|')\n"
+       << "  --px-delim  Delimiter - Use this character as price delimiter (def: ' ')\n"
        << "  --qty-delim Delimiter - Use this character as quantity delimiter (def: '@')\n"
        << "  --epoch               - Output time as integer (us or ms) since epoch\n"
        << "  --msec                - Use millisecond time resolution (def: usec)\n"
@@ -57,7 +57,7 @@ void Usage(std::string const& a_text = "")
        << "  -I|--instr            - Include instrument name in the output\n"
        << "  -Q|--quotes           - Print quotes\n"
        << "  -T|--trades           - Print trades\n"
-       << "  --agg-qty NumLevels   - Print aggregated quantity of NumLevels\n"
+       << "  -A|--aggr-qty Levels  - Print aggregated quantity of number of Levels\n"
        << "  -F|--fixed-cols       - Print fixed number of price/qty columns\n"
        << "  -C|--candles Resol    - Print candles of given resolution\n"
        << "                             Valid resolutions: Ny, where:\n"
@@ -299,7 +299,7 @@ int main(int argc, char* argv[])
       if (opts.match("-D", "--full-date",   &fulldate)) continue;
       if (opts.match("-q", "--quiet",          &quiet)) continue;
       if (opts.match("-p", "--px-only",      &px_only)) continue;
-      if (opts.match("",   "--agg-qty",      &agg_qty)) continue;
+      if (opts.match("-A", "--aggr-qty",     &agg_qty)) continue;
       if (opts.match("-o", "--output",       &outfile)) continue;
       if (opts.match("-S", "--symbol",   &with_symbol)) continue;
       if (opts.match("-X", "--xchg",       &with_xchg)) continue;
