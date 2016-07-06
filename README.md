@@ -2,7 +2,7 @@
 
 Data storage format and supporting Linux tools for financial market data.
 It's designed to represent snapshots of the multi-level order book and trades.
-The format is documented here: https://github.com/saleyn/sdb/wiki/Data-Format
+The format is documented here: https://github.com/saleyn/sdb/wiki/SDB-Data-Format
 
 The SDB tools include:
 
